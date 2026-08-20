@@ -50,8 +50,7 @@ OPEN_PATHS = {
     "/setup",
     "/api/setup",
     "/api/auth/state",
-    "/api/signup/request",
-    "/api/signup/verify",
+    "/api/signup",
     "/favicon.svg",
 }
 
@@ -206,17 +205,19 @@ def clear_failures(key: str) -> None:
 
 # ------------------------------------------------------- signup by email
 
-CODE_TTL_S = 10 * 60
-CODE_MAX_ATTEMPTS = 5
-
 
 def normalise_email(email: str) -> str:
     return email.strip().lower()
 
 
 def valid_email(email: str) -> bool:
-    """Deliberately loose. The code in the inbox is the real proof; a strict
-    regex here only rejects addresses that are in fact deliverable."""
+    """Deliberately loose.
+
+    Nothing here proves the address belongs to whoever typed it - there is no
+    verification step - so a strict pattern would only reject deliverable
+    addresses while catching none of the addresses that are simply someone
+    else's. It is an identifier and a way to reach the person, not a proof.
+    """
     if len(email) > 254 or email.count("@") != 1:
         return False
     local, _, domain = email.partition("@")
@@ -227,45 +228,6 @@ def email_taken(conn: sqlite3.Connection, email: str) -> bool:
     return conn.execute(
         "SELECT 1 FROM patients WHERE email = ? LIMIT 1", (normalise_email(email),)
     ).fetchone() is not None
-
-
-def issue_code(conn: sqlite3.Connection, email: str) -> str:
-    """Replaces any code already outstanding for this address."""
-    code = f"{secrets.randbelow(1_000_000):06d}"
-    digest, salt = hash_password(code)
-    conn.execute(
-        "INSERT INTO signup_codes (email, code_hash, salt, expires_at, attempts) "
-        "VALUES (?,?,?,?,0) ON CONFLICT(email) DO UPDATE SET "
-        "code_hash=excluded.code_hash, salt=excluded.salt, "
-        "expires_at=excluded.expires_at, attempts=0",
-        (normalise_email(email), digest, salt, time.time() + CODE_TTL_S),
-    )
-    conn.commit()
-    return code
-
-
-def check_code(conn: sqlite3.Connection, email: str, code: str) -> str | None:
-    """None if the code is good, otherwise the reason it is not."""
-    email = normalise_email(email)
-    row = conn.execute("SELECT * FROM signup_codes WHERE email = ?", (email,)).fetchone()
-    if row is None:
-        return "Ask for a code first."
-    if row["expires_at"] < time.time():
-        conn.execute("DELETE FROM signup_codes WHERE email = ?", (email,))
-        conn.commit()
-        return "That code has expired. Ask for a new one."
-    if row["attempts"] >= CODE_MAX_ATTEMPTS:
-        return "Too many wrong codes. Ask for a new one."
-    if not verify_password(code.strip(), row["code_hash"], row["salt"]):
-        conn.execute("UPDATE signup_codes SET attempts = attempts + 1 WHERE email = ?", (email,))
-        conn.commit()
-        return "That code is not right."
-    return None
-
-
-def consume_code(conn: sqlite3.Connection, email: str) -> None:
-    conn.execute("DELETE FROM signup_codes WHERE email = ?", (normalise_email(email),))
-    conn.commit()
 
 
 # ------------------------------------------------------------ legacy gate

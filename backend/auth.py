@@ -9,7 +9,7 @@ import urllib.parse
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from . import accounts, landing, mailer
+from . import accounts, landing
 from .db import connect, get_db
 
 router = APIRouter()
@@ -96,7 +96,7 @@ def _render(kind: str, message: str = "", status: int = 200) -> HTMLResponse:
     an existing user is one click from the box they came for.
     """
     return HTMLResponse(
-        landing.page(message, mail_configured=mailer.configured()), status_code=status
+        landing.page(message), status_code=status
     )
 
 
@@ -225,65 +225,41 @@ async def login(request: Request, conn: sqlite3.Connection = Depends(get_db)) ->
     return response
 
 
-@router.post("/api/signup/request")
-async def signup_request(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Response:
-    """Send a code to an address. Says the same thing whether or not it is
-    already registered, so this cannot be used to test who has an account."""
+@router.post("/api/signup")
+async def signup(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Response:
+    """Create an account and sign in, in one step.
+
+    The address is stored as an identifier and a way to reach the person; it is
+    not verified, so it proves nothing about who is signing up.
+    """
     key = accounts.client_key(request)
     if accounts.throttled(key):
         raise HTTPException(status_code=429, detail="Too many attempts. Wait a few minutes.")
 
     form = await _form(request)
     email = accounts.normalise_email(form.get("email", ""))
-    if not accounts.valid_email(email):
-        raise HTTPException(status_code=422, detail="That does not look like an email address.")
-
-    if accounts.email_taken(conn, email):
-        # Deliberately indistinguishable from success. Nothing is sent and no
-        # code is stored, so the address cannot be taken over this way either.
-        accounts.record_failure(key)
-        return JSONResponse({"delivered": mailer.configured()})
-
-    code = accounts.issue_code(conn, email)
-    delivered = mailer.send_code(email, code, accounts.CODE_TTL_S // 60)
-    return JSONResponse({"delivered": delivered})
-
-
-@router.post("/api/signup/verify")
-async def signup_verify(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Response:
-    """Check the code, then create the account and sign them in."""
-    key = accounts.client_key(request)
-    if accounts.throttled(key):
-        raise HTTPException(status_code=429, detail="Too many attempts. Wait a few minutes.")
-
-    form = await _form(request)
-    email = accounts.normalise_email(form.get("email", ""))
-    code = form.get("code", "")
     name = form.get("name", "").strip()
     username = form.get("username", "").strip()
     password = form.get("password", "")
 
+    if not accounts.valid_email(email):
+        raise HTTPException(status_code=422, detail="That does not look like an email address.")
     problem = _validate(name, username, password)
     if problem:
         raise HTTPException(status_code=422, detail=problem)
 
-    failure = accounts.check_code(conn, email, code)
-    if failure:
-        accounts.record_failure(key)
-        raise HTTPException(status_code=401, detail=failure)
-
     if accounts.find_by_username(conn, username) is not None:
         raise HTTPException(status_code=409, detail="That username is taken.")
     if accounts.email_taken(conn, email):
+        # Says so plainly. Without a verification step there is no way to make
+        # this both usable and non-enumerable, and open registration lets
+        # anyone discover the same fact by trying anyway.
         raise HTTPException(status_code=409, detail="That address already has an account.")
 
     # The first person through the door administers the instance; there is
     # nobody else who could have granted it.
     first = not accounts.accounts_exist(conn)
-    row = accounts.create_account(
-        conn, name, username, password, is_admin=first, email=email
-    )
-    accounts.consume_code(conn, email)
+    row = accounts.create_account(conn, name, username, password, is_admin=first, email=email)
     accounts.clear_failures(key)
 
     response = JSONResponse({"ok": True, "account": accounts.public(row)})

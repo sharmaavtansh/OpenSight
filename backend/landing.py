@@ -124,7 +124,6 @@ STYLE = (
   .msg { margin-top: 12px; font-size: 13px; min-height: 18px; color: var(--orange); }
   .msg.ok { color: var(--text-dim); }
   .hint { margin-top: 14px; font-size: 11px; color: var(--text-dim); opacity: 0.7; }
-  .code input { letter-spacing: 0.5em; font-size: 20px; text-align: center; }
   [hidden] { display: none !important; }
   footer {
     border-top: 1px solid var(--line);
@@ -218,75 +217,46 @@ EXPLAINER = """
 
 SCRIPT = """
   const $ = (s) => document.querySelector(s);
-  const panes = { signin: $('#pane-signin'), request: $('#pane-request'), verify: $('#pane-verify') };
-  let pendingEmail = '';
 
-  function show(which) {
-    for (const [k, el] of Object.entries(panes)) el.hidden = k !== which;
-    $('#tab-signin').setAttribute('aria-selected', String(which === 'signin'));
-    $('#tab-signup').setAttribute('aria-selected', String(which !== 'signin'));
+  function show(signup) {
+    $('#pane-signin').hidden = signup;
+    $('#pane-signup').hidden = !signup;
+    $('#tab-signin').setAttribute('aria-selected', String(!signup));
+    $('#tab-signup').setAttribute('aria-selected', String(signup));
   }
-  $('#tab-signin').onclick = () => show('signin');
-  $('#tab-signup').onclick = () => show('request');
-  $('#back-to-email').onclick = (e) => { e.preventDefault(); show('request'); };
+  $('#tab-signin').onclick = () => show(false);
+  $('#tab-signup').onclick = () => show(true);
 
-  async function post(url, body) {
-    const r = await fetch(url, {
+  $('#pane-signup').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $('#signup-go');
+    const msg = $('#msg-signup');
+    btn.disabled = true;
+    msg.textContent = '';
+    const r = await fetch('/api/signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        email: $('#signup-email').value.trim(),
+        name: $('#signup-name').value.trim(),
+        username: $('#signup-username').value.trim(),
+        password: $('#signup-password').value,
+      }),
     });
     let data = {};
     try { data = await r.json(); } catch (_) { /* an HTML error page */ }
-    return { ok: r.ok, status: r.status, data };
-  }
-
-  function say(el, text, ok) {
-    el.textContent = text;
-    el.className = ok ? 'msg ok' : 'msg';
-  }
-
-  $('#form-request').onsubmit = async (e) => {
-    e.preventDefault();
-    const btn = $('#request-go'); btn.disabled = true;
-    const email = $('#signup-email').value.trim();
-    const { ok, data } = await post('/api/signup/request', { email });
-    btn.disabled = false;
-    if (!ok) return say($('#msg-request'), data.detail || 'That did not work.', false);
-    pendingEmail = email;
-    $('#verify-email').textContent = email;
-    say($('#msg-verify'), data.delivered
-      ? 'A six-digit code is on its way to ' + email + '.'
-      : 'Mail is not configured on this server, so the code was written to the server log.', true);
-    show('verify');
-    $('#signup-code').focus();
-  };
-
-  $('#form-verify').onsubmit = async (e) => {
-    e.preventDefault();
-    const btn = $('#verify-go'); btn.disabled = true;
-    const { ok, data } = await post('/api/signup/verify', {
-      email: pendingEmail,
-      code: $('#signup-code').value.trim(),
-      name: $('#signup-name').value.trim(),
-      username: $('#signup-username').value.trim(),
-      password: $('#signup-password').value,
-    });
-    btn.disabled = false;
-    if (!ok) return say($('#msg-verify'), data.detail || 'That did not work.', false);
+    if (!r.ok) {
+      btn.disabled = false;
+      msg.textContent = data.detail || 'That did not work.';
+      return;
+    }
     window.location = '/';
   };
 """
 
 
-def page(message: str = "", *, mail_configured: bool = False) -> str:
+def page(message: str = "") -> str:
     banner = f'<div class="msg">{message}</div>' if message else '<div class="msg"></div>'
-    mail_hint = (
-        ""
-        if mail_configured
-        else '<p class="hint">Mail is not configured on this server, so the code '
-        "is written to the server log instead of being emailed.</p>"
-    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -314,34 +284,22 @@ def page(message: str = "", *, mail_configured: bool = False) -> str:
       {banner}
     </form>
 
-    <form id="pane-request" hidden>
+    <form id="pane-signup" hidden>
       <label for="signup-email">Your email</label>
       <input id="signup-email" type="email" autocomplete="email" required>
-      <button class="go" id="request-go" type="submit">Send me a code</button>
-      <div class="msg" id="msg-request"></div>
-      <p class="hint">
-        We send a six-digit code to confirm the address. No account exists
-        until you use it.
-      </p>
-      {mail_hint}
-    </form>
-
-    <form id="pane-verify" hidden>
-      <p class="hint">Code sent to <strong id="verify-email"></strong>.
-        <a href="#" id="back-to-email">Use a different address</a>.</p>
-      <div class="code">
-        <label for="signup-code">Six-digit code</label>
-        <input id="signup-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
-      </div>
       <label for="signup-name">Your name</label>
-      <input id="signup-name" autocomplete="name">
+      <input id="signup-name" autocomplete="name" required>
       <label for="signup-username">Choose a username</label>
-      <input id="signup-username" autocomplete="username">
+      <input id="signup-username" autocomplete="username" required>
       <label for="signup-password">Choose a password</label>
-      <input id="signup-password" type="password" autocomplete="new-password">
-      <button class="go" id="verify-go" type="submit">Create account</button>
-      <div class="msg" id="msg-verify"></div>
-      <p class="hint">The code expires in ten minutes.</p>
+      <input id="signup-password" type="password" autocomplete="new-password" required>
+      <button class="go" id="signup-go" type="submit">Create account</button>
+      <div class="msg" id="msg-signup"></div>
+      <p class="hint">
+        At least 8 characters. Your email is how you are identified and
+        contacted; it is not verified, so check it is right - there is no way
+        to recover the account through it.
+      </p>
     </form>
   </aside>
 </div>

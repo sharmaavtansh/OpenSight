@@ -86,8 +86,8 @@ starts from an empty database and the patient history is gone.
 
 Each person signs in to their own account and gets their own calibration,
 glasses colours, controls and results. Signing up asks for an email address,
-sends a six-digit code to it, and only creates the account once the code is
-used. The first account created administers the instance.
+and a password of their choosing. The first account created administers the
+instance.
 
 The rule that makes this worth anything: **once someone is signed in, the user
 whose data they see comes from their session, never from a query parameter.**
@@ -102,18 +102,19 @@ third-party package on a machine a parent installs unattended.
 An install with no accounts has no gate at all, which is what the desktop
 launcher relies on. Creating the first account turns authentication on.
 
-#### Sending the code
+#### What the email is, and is not
 
-Set these to send real email; any SMTP provider works:
+The address is an identifier and a way to reach someone. It is **not
+verified** - there is no code and no confirmation link - so:
 
-```bash
-fly secrets set   OPENSIGHT_SMTP_HOST=smtp.example.com   OPENSIGHT_SMTP_PORT=587   OPENSIGHT_SMTP_USER=you@example.com   OPENSIGHT_SMTP_PASSWORD='...'   OPENSIGHT_SMTP_FROM=you@example.com
-```
+- a typo silently creates an account nobody can be contacted at;
+- nothing stops someone signing up with an address that is not theirs;
+- there is no verified address to hang a password reset on, so a forgotten
+  password currently means a new account.
 
-**Unconfigured, the code is written to the server log instead of being sent**,
-and the signup page says so. That keeps local development working, and it is
-loud rather than silent: a quiet failure here leaves someone watching an inbox
-for a message that was never going to arrive.
+Signing up on a public instance is open to anyone who finds the URL. If that
+is not wanted, put the instance behind the shared password as well, or do not
+publish the URL.
 
 ### The legacy shared password
 

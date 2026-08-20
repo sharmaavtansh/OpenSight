@@ -26,15 +26,6 @@ CREATE TABLE IF NOT EXISTS patients (
     created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS signup_codes (
-    email       TEXT    PRIMARY KEY,
-    code_hash   TEXT    NOT NULL,
-    salt        TEXT    NOT NULL,
-    expires_at  REAL    NOT NULL,
-    attempts    INTEGER NOT NULL DEFAULT 0,
-    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
-);
-
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -143,6 +134,9 @@ INDICES: list[str] = [
     "ON patients(username) WHERE username IS NOT NULL",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_patients_email "
     "ON patients(email) WHERE email IS NOT NULL",
+    # Signup no longer sends a code. Anything still sitting in this table is a
+    # half-finished signup from the previous scheme and means nothing now.
+    "DROP TABLE IF EXISTS signup_codes",
 ]
 
 
