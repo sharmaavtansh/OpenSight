@@ -11,6 +11,8 @@ import { useApp } from '../store'
  *  what it said. Switching here reloads settings and the acuity table
  *  together, so the two can never disagree. */
 export function UserMenu() {
+  const account = useApp((s) => s.account)
+  const signOut = useApp((s) => s.signOut)
   const users = useApp((s) => s.users)
   const patientId = useApp((s) => s.patientId)
   const selectUser = useApp((s) => s.selectUser)
@@ -22,8 +24,11 @@ export function UserMenu() {
   const [name, setName] = useState('')
   const box = useRef<HTMLDivElement>(null)
 
+  // Signed in, you *are* a user - there is nothing to switch between, and the
+  // server would ignore the attempt anyway. The menu becomes an identity and a
+  // way out instead of a picker.
   const active = users.find((u) => u.id === patientId) ?? null
-  const label = active ? active.name : 'Shared'
+  const label = account ? account.name : active ? active.name : 'Shared'
 
   // Click-away and Escape, so the menu never strands the pointer.
   useEffect(() => {
@@ -89,7 +94,35 @@ export function UserMenu() {
         </svg>
       </button>
 
-      {open && (
+      {open && account && (
+        <div className="usermenu__panel" role="menu">
+          <div className="usermenu__heading">Signed in</div>
+          <div className="usermenu__who">
+            <span className="usermenu__avatar" aria-hidden="true">
+              {account.name.slice(0, 1).toUpperCase()}
+            </span>
+            <span className="usermenu__label">
+              {account.name}
+              <em>{account.email ?? account.username}</em>
+            </span>
+          </div>
+          <button
+            className="usermenu__new"
+            onClick={() => {
+              sound.play('tap')
+              void signOut()
+            }}
+          >
+            Sign out
+          </button>
+          <p className="usermenu__note">
+            Your screen calibration, glasses colours and results belong to this account
+            {account.is_admin ? ' — you can also manage the instance.' : '.'}
+          </p>
+        </div>
+      )}
+
+      {open && !account && (
         <div className="usermenu__panel" role="menu">
           <div className="usermenu__heading">Using settings for</div>
 

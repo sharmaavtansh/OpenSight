@@ -1459,3 +1459,14 @@ select {
 @media (max-width: 1080px) {
   .usermenu__name { display: none; }
 }
+
+/* Signed-in identity block: same shape as a picker row, but not clickable -
+   there is nothing to switch to. */
+.usermenu__who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}

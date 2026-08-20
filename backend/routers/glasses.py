@@ -11,9 +11,10 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ..auth import resolve_patient
 from ..db import get_db, write_setting
 from ..glasses import (
     ALPHA_LADDER,
@@ -85,9 +86,11 @@ def safe(faintest_seen: float | None = None) -> dict[str, Any]:
 @router.post("")
 def submit(
     payload: GlassesCalibration,
+    request: Request,
     patient_id: int | None = None,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict[str, Any]:
+    patient_id = resolve_patient(request, patient_id)
     orientation = resolve_orientation(payload.right_eye_sees, payload.left_eye_sees)
 
     isolation: dict[str, dict[str, float | None]] = {bg: {} for bg in PROFILES}
@@ -122,10 +125,12 @@ def submit(
 
 @router.get("/preview")
 def preview(
+    request: Request,
     background: str = "black",
     patient_id: int | None = None,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict[str, Any]:
+    patient_id = resolve_patient(request, patient_id)
     """What the current stored calibration means, in plain terms."""
     if background not in PROFILES:
         raise HTTPException(status_code=404, detail="unknown background profile")

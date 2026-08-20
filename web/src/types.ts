@@ -215,3 +215,14 @@ export interface User {
   notes?: string | null
   created_at?: string
 }
+
+/** The signed-in account. Null when nobody is signed in, which on a desktop
+ *  install is the normal state - there the gate is off entirely. */
+export interface Account {
+  id: number
+  name: string
+  username: string | null
+  email: string | null
+  is_admin: boolean
+  treated_eye: 'left' | 'right' | 'both' | null
+}

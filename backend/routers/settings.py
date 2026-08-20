@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from ..acuity import DisplayCalibration, acuity_table
+from ..auth import resolve_patient
 from ..db import get_db, read_setting, write_setting
 from ..models import SettingsIn
 
@@ -58,8 +59,11 @@ def load_settings(conn: sqlite3.Connection, patient_id: int | None = None) -> di
 
 @router.get("")
 def get_settings(
-    patient_id: int | None = None, conn: sqlite3.Connection = Depends(get_db)
+    request: Request,
+    patient_id: int | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
 ) -> dict:
+    patient_id = resolve_patient(request, patient_id)
     settings = load_settings(conn, patient_id)
     cal = DisplayCalibration(**settings["calibration"])
     return {
@@ -79,10 +83,12 @@ def get_settings(
 @router.put("")
 def put_settings(
     payload: SettingsIn,
+    request: Request,
     patient_id: int | None = None,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict:
-    """Writes to the selected user's row, or to the install row when none."""
+    """Writes to the signed-in user's row, or to the install row when none."""
+    patient_id = resolve_patient(request, patient_id)
     write_setting(conn, settings_key(patient_id), payload.model_dump())
     conn.commit()
-    return get_settings(patient_id, conn)
+    return get_settings(request, patient_id, conn)

@@ -1,7 +1,15 @@
 import { create } from 'zustand'
 import { api } from './api'
 import { sound } from './audio'
-import type { Activity, Catalog, Difficulty, SessionPlan, Settings, User } from './types'
+import type {
+  Account,
+  Activity,
+  Catalog,
+  Difficulty,
+  SessionPlan,
+  Settings,
+  User,
+} from './types'
 
 // Which user was last in front of this screen. Kept in localStorage rather
 // than on the server: it is a property of this browser, not of the install,
@@ -52,7 +60,12 @@ interface AppState {
   /** Whose visual configuration is in force. null = the shared install row. */
   patientId: number | null
   users: User[]
+  /** Who is signed in, or null on an install with no accounts. */
+  account: Account | null
+  /** True once accounts exist: the shell then shows an account, not a picker. */
+  authRequired: boolean
   load: () => Promise<void>
+  signOut: () => Promise<void>
   loadUsers: () => Promise<void>
   selectUser: (patientId: number | null) => Promise<void>
   createUser: (name: string) => Promise<void>
@@ -100,11 +113,18 @@ export const useApp = create<AppState>((set, get) => ({
   // should not silently land on someone else's calibration.
   patientId: readStoredUser(),
   users: [],
+  account: null,
+  authRequired: false,
 
   load: async () => {
     set({ loading: true, error: null })
     try {
-      const id = get().patientId
+      // Signed in? Then the account decides the scope and the stored id is
+      // irrelevant - the server ignores it anyway.
+      const auth = await api
+        .authState()
+        .catch(() => ({ accounts_exist: false, required: false, account: null }))
+      const id = auth.account ? auth.account.id : get().patientId
       const [catalog, settings, users] = await Promise.all([
         api.catalog(id),
         api.settings(id),
@@ -118,7 +138,9 @@ export const useApp = create<AppState>((set, get) => ({
         catalog,
         settings,
         users,
-        patientId: stillExists ? id : null,
+        account: auth.account,
+        authRequired: auth.required,
+        patientId: auth.account ? auth.account.id : stillExists ? id : null,
         loading: false,
       })
       if (!stillExists) writeStoredUser(null)
@@ -192,6 +214,15 @@ export const useApp = create<AppState>((set, get) => ({
       set({ catalog: await api.catalog(id) })
     } catch {
       /* keep the previous catalogue if the refresh fails */
+    }
+  },
+
+  signOut: async () => {
+    try {
+      await api.logout()
+    } finally {
+      writeStoredUser(null)
+      window.location.href = '/login'
     }
   },
 

@@ -7,6 +7,7 @@ import type {
   Settings,
   Trial,
   User,
+  Account,
 } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -46,6 +47,13 @@ export const api = {
     }),
 
   users: () => request<{ patients: User[] }>('/api/patients'),
+
+  authState: () =>
+    request<{ accounts_exist: boolean; required: boolean; account: Account | null }>(
+      '/api/auth/state',
+    ),
+
+  logout: () => request<{ ok: boolean }>('/api/logout', { method: 'POST' }),
 
   createUser: (payload: { name: string; treated_eye?: string | null }) =>
     request<User>('/api/patients', { method: 'POST', body: JSON.stringify(payload) }),

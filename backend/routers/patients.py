@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ..auth import is_admin, session_patient_id
 from ..db import get_db
 from ..models import PatientIn
 from .settings import settings_key
@@ -13,10 +14,28 @@ from .settings import settings_key
 router = APIRouter(prefix="/api/patients", tags=["patients"])
 
 
+PUBLIC_COLUMNS = ("id", "name", "dob", "treated_eye", "notes", "created_at", "username", "is_admin")
+
+
+def _public(row: sqlite3.Row) -> dict:
+    """Never let a password hash or salt out of the database."""
+    data = dict(row)
+    return {k: data.get(k) for k in PUBLIC_COLUMNS}
+
+
 @router.get("")
-def list_patients(conn: sqlite3.Connection = Depends(get_db)) -> dict:
-    rows = conn.execute("SELECT * FROM patients ORDER BY created_at").fetchall()
-    return {"patients": [dict(r) for r in rows]}
+def list_patients(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+    """Everyone, for an admin or an open install; otherwise just yourself.
+
+    A signed-in non-admin listing every account would hand them the roster of
+    everyone using the instance, which accounts exist to prevent.
+    """
+    me = session_patient_id(request)
+    if me is not None and not is_admin(request):
+        rows = conn.execute("SELECT * FROM patients WHERE id = ?", (me,)).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM patients ORDER BY created_at").fetchall()
+    return {"patients": [_public(r) for r in rows]}
 
 
 @router.post("", status_code=201)
@@ -27,7 +46,7 @@ def create_patient(payload: PatientIn, conn: sqlite3.Connection = Depends(get_db
     )
     conn.commit()
     row = conn.execute("SELECT * FROM patients WHERE id = ?", (cur.lastrowid,)).fetchone()
-    return dict(row)
+    return _public(row)
 
 
 @router.put("/{patient_id}")
@@ -42,7 +61,7 @@ def update_patient(
         raise HTTPException(status_code=404, detail="unknown patient")
     conn.commit()
     row = conn.execute("SELECT * FROM patients WHERE id = ?", (patient_id,)).fetchone()
-    return dict(row)
+    return _public(row)
 
 
 @router.delete("/{patient_id}", status_code=204)

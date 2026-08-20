@@ -7,10 +7,11 @@ import secrets
 import sqlite3
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException
 
 from ..acuity import ACUITY_LEVELS, DisplayCalibration
 from ..catalog import get_activity, get_mode
+from ..auth import resolve_patient
 from ..db import get_db
 from ..models import SessionFinish, SessionStart
 from ..planner import build_plan
@@ -23,7 +24,9 @@ PENALTY_PER_FALSE_ALARM = 3
 
 
 @router.post("")
-def start_session(payload: SessionStart, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def start_session(
+    payload: SessionStart, request: Request, conn: sqlite3.Connection = Depends(get_db)
+) -> dict:
     try:
         get_activity(payload.activity_id)
         mode = get_mode(payload.mode_id)
@@ -33,8 +36,10 @@ def start_session(payload: SessionStart, conn: sqlite3.Connection = Depends(get_
     if payload.acuity not in ACUITY_LEVELS:
         raise HTTPException(status_code=422, detail=f"unsupported acuity 20/{payload.acuity}")
 
-    # This user's calibration and channel alphas, not the install default.
-    settings = load_settings(conn, payload.patient_id)
+    # Whose calibration and channel alphas this run uses. A signed-in account
+    # always means itself; the payload only decides on an open install.
+    owner = resolve_patient(request, payload.patient_id)
+    settings = load_settings(conn, owner)
     calibration = dict(settings["calibration"])
     if payload.device_pixel_ratio:
         # The browser knows its own DPR better than the stored calibration does.
@@ -62,7 +67,7 @@ def start_session(payload: SessionStart, conn: sqlite3.Connection = Depends(get_
            VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (
             session_id,
-            payload.patient_id,
+            owner,
             payload.activity_id,
             payload.mode_id,
             mode["eye"],
@@ -145,11 +150,14 @@ def get_session(session_id: str, conn: sqlite3.Connection = Depends(get_db)) -> 
 
 @router.get("")
 def list_sessions(
+    request: Request,
     limit: int = 50,
     activity_id: str | None = None,
     patient_id: int | None = None,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict:
+    # Your own sessions. A signed-in account cannot list another's by asking.
+    patient_id = resolve_patient(request, patient_id)
     clauses, args = ["status != 'running'"], []
     if activity_id:
         clauses.append("activity_id = ?")

@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from ..catalog import ACTIVITY_BY_ID
+from ..auth import resolve_patient
 from ..db import get_db
 
 router = APIRouter(prefix="/api", tags=["progress"])
 
 
 @router.get("/progress")
-def progress(patient_id: int | None = None, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def progress(
+    request: Request,
+    patient_id: int | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
+    # Your own results, never another account's.
+    patient_id = resolve_patient(request, patient_id)
     where, args = ["status = 'completed'"], []
     if patient_id is not None:
         where.append("patient_id = ?")

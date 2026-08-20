@@ -15,8 +15,9 @@ import sqlite3
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ..auth import resolve_patient
 from ..acuity import DisplayCalibration, describe
 from ..assessment import (
     ACUITY_LEVELS,
@@ -141,19 +142,22 @@ def _trials(assessment_id: str, conn: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 @router.post("")
-def start_assessment(payload: AssessmentStart, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def start_assessment(
+    payload: AssessmentStart, request: Request, conn: sqlite3.Connection = Depends(get_db)
+) -> dict:
     assessment_id = uuid.uuid4().hex
     seed = payload.seed if payload.seed is not None else secrets.randbelow(2**31)
     # Snapshot this user's calibration: a later recalibration must not
     # retroactively change what a recorded measurement meant.
-    settings = load_settings(conn, payload.patient_id)
+    owner = resolve_patient(request, payload.patient_id)
+    settings = load_settings(conn, owner)
     conn.execute(
         "INSERT INTO assessments (id, patient_id, kind, seed, acuity_json) VALUES (?,?,?,?,?)",
-        (assessment_id, payload.patient_id, payload.kind, seed, json.dumps(settings["calibration"])),
+        (assessment_id, owner, payload.kind, seed, json.dumps(settings["calibration"])),
     )
     conn.commit()
     return _next_payload(
-        assessment_id, seed, [], conn, payload.device_pixel_ratio, payload.patient_id
+        assessment_id, seed, [], conn, payload.device_pixel_ratio, owner
     )
 
 
@@ -210,7 +214,12 @@ def respond(
 
 
 @router.get("")
-def list_assessments(patient_id: int | None = None, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def list_assessments(
+    request: Request,
+    patient_id: int | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
+    patient_id = resolve_patient(request, patient_id)
     clause, args = "status = 'completed'", []
     if patient_id is not None:
         clause += " AND patient_id = ?"
@@ -261,8 +270,13 @@ def _glasses_usable(conn: sqlite3.Connection, patient_id: int | None = None) -> 
 
 
 @router.get("/latest/plan")
-def latest_plan(patient_id: int | None = None, conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def latest_plan(
+    request: Request,
+    patient_id: int | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict:
     """The therapy plan implied by the most recent completed assessment."""
+    patient_id = resolve_patient(request, patient_id)
     clause, args = "status = 'completed'", []
     if patient_id is not None:
         clause += " AND patient_id = ?"

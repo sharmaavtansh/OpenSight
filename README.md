@@ -82,7 +82,40 @@ app; scaling it means moving to Postgres first.
 deploy. Without `opensight_data` mounted at `/data`, every deploy silently
 starts from an empty database and the patient history is gone.
 
-### The password
+### Accounts
+
+Each person signs in to their own account and gets their own calibration,
+glasses colours, controls and results. Signing up asks for an email address,
+sends a six-digit code to it, and only creates the account once the code is
+used. The first account created administers the instance.
+
+The rule that makes this worth anything: **once someone is signed in, the user
+whose data they see comes from their session, never from a query parameter.**
+Scoping on a client-supplied `?patient_id=` would let any account read any
+other account's calibration and results by editing the URL.
+
+Passwords are PBKDF2-HMAC-SHA256, 240k rounds, per-user salt - a stdlib
+primitive, so it costs no dependency. It is weaker than Argon2 against an
+attacker holding the database, and is chosen because the alternative is a
+third-party package on a machine a parent installs unattended.
+
+An install with no accounts has no gate at all, which is what the desktop
+launcher relies on. Creating the first account turns authentication on.
+
+#### Sending the code
+
+Set these to send real email; any SMTP provider works:
+
+```bash
+fly secrets set   OPENSIGHT_SMTP_HOST=smtp.example.com   OPENSIGHT_SMTP_PORT=587   OPENSIGHT_SMTP_USER=you@example.com   OPENSIGHT_SMTP_PASSWORD='...'   OPENSIGHT_SMTP_FROM=you@example.com
+```
+
+**Unconfigured, the code is written to the server log instead of being sent**,
+and the signup page says so. That keeps local development working, and it is
+loud rather than silent: a quiet failure here leaves someone watching an inbox
+for a message that was never going to arrive.
+
+### The legacy shared password
 
 There are no user accounts. Every endpoint trusts whoever can reach it, which
 is correct for one family on one machine and wrong on a public URL, where the

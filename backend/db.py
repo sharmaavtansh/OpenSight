@@ -26,6 +26,15 @@ CREATE TABLE IF NOT EXISTS patients (
     created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS signup_codes (
+    email       TEXT    PRIMARY KEY,
+    code_hash   TEXT    NOT NULL,
+    salt        TEXT    NOT NULL,
+    expires_at  REAL    NOT NULL,
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -118,6 +127,22 @@ def connect() -> sqlite3.Connection:
 # not alter an existing table, so they are applied explicitly.
 MIGRATIONS: list[tuple[str, str, str]] = [
     ("assessment_trials", "phase", "TEXT NOT NULL DEFAULT 'threshold'"),
+    # Credentials live on the person they belong to. Nullable throughout: a
+    # patient record created before accounts existed, or one a parent manages
+    # without a separate login, simply has none.
+    ("patients", "username", "TEXT"),
+    ("patients", "password_hash", "TEXT"),
+    ("patients", "password_salt", "TEXT"),
+    ("patients", "is_admin", "INTEGER NOT NULL DEFAULT 0"),
+    ("patients", "email", "TEXT"),
+]
+
+# SQLite cannot add a UNIQUE column by ALTER, so the constraint is an index.
+INDICES: list[str] = [
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_patients_username "
+    "ON patients(username) WHERE username IS NOT NULL",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_patients_email "
+    "ON patients(email) WHERE email IS NOT NULL",
 ]
 
 
@@ -128,6 +153,8 @@ def init_db() -> None:
             existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
             if column not in existing:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+        for statement in INDICES:
+            conn.execute(statement)
 
 
 @contextmanager
