@@ -124,6 +124,22 @@ STYLE = (
   .msg { margin-top: 12px; font-size: 13px; min-height: 18px; color: var(--orange); }
   .msg.ok { color: var(--text-dim); }
   .hint { margin-top: 14px; font-size: 11px; color: var(--text-dim); opacity: 0.7; }
+  select {
+    width: 100%; padding: 11px 12px; font-size: 13px; color: var(--text);
+    background: var(--navy-900); border: 1px solid var(--line);
+    border-radius: 10px; outline: none;
+  }
+  select:focus { border-color: var(--purple); }
+  .q { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .q label { margin-top: 0; }
+  .q input { margin-top: 7px; }
+  .linkish {
+    display: block; width: 100%; margin-top: 14px; padding: 0;
+    background: none; border: 0; color: var(--text-dim);
+    font: inherit; font-size: 12px; text-decoration: underline;
+    cursor: pointer; text-align: center;
+  }
+  .linkish:hover { color: var(--text); }
   [hidden] { display: none !important; }
   footer {
     border-top: 1px solid var(--line);
@@ -217,39 +233,128 @@ EXPLAINER = """
 
 SCRIPT = """
   const $ = (s) => document.querySelector(s);
+  const PANES = ['signin', 'signup', 'recover'];
 
-  function show(signup) {
-    $('#pane-signin').hidden = signup;
-    $('#pane-signup').hidden = !signup;
-    $('#tab-signin').setAttribute('aria-selected', String(!signup));
-    $('#tab-signup').setAttribute('aria-selected', String(signup));
+  function show(which) {
+    for (const p of PANES) $('#pane-' + p).hidden = p !== which;
+    $('#tab-signin').setAttribute('aria-selected', String(which === 'signin'));
+    $('#tab-signup').setAttribute('aria-selected', String(which === 'signup'));
   }
-  $('#tab-signin').onclick = () => show(false);
-  $('#tab-signup').onclick = () => show(true);
+  $('#tab-signin').onclick = () => show('signin');
+  $('#tab-signup').onclick = () => show('signup');
+  $('#forgot').onclick = (e) => { e.preventDefault(); show('recover'); };
+  $('#recover-back').onclick = (e) => { e.preventDefault(); show('signin'); };
 
-  $('#pane-signup').onsubmit = async (e) => {
-    e.preventDefault();
-    const btn = $('#signup-go');
-    const msg = $('#msg-signup');
-    btn.disabled = true;
-    msg.textContent = '';
-    const r = await fetch('/api/signup', {
+  async function post(url, body) {
+    const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: $('#signup-email').value.trim(),
-        name: $('#signup-name').value.trim(),
-        username: $('#signup-username').value.trim(),
-        password: $('#signup-password').value,
-      }),
+      body: JSON.stringify(body),
     });
     let data = {};
     try { data = await r.json(); } catch (_) { /* an HTML error page */ }
-    if (!r.ok) {
-      btn.disabled = false;
-      msg.textContent = data.detail || 'That did not work.';
-      return;
-    }
+    return { ok: r.ok, data };
+  }
+
+  // Populate the three pickers, and keep them from colliding: a question
+  // already chosen above is removed from the ones below, because three
+  // copies of the same question is one answer wearing a disguise.
+  let BANK = [];
+  const pickers = () => [0, 1, 2].map((i) => $('#question_' + i));
+
+  function refreshOptions() {
+    const chosen = pickers().map((p) => p.value);
+    pickers().forEach((sel, i) => {
+      const mine = sel.value;
+      sel.innerHTML = '';
+      for (const q of BANK) {
+        if (chosen.includes(q.id) && q.id !== mine) continue;
+        const opt = document.createElement('option');
+        opt.value = q.id;
+        opt.textContent = q.text;
+        if (q.id === mine) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    });
+  }
+
+  fetch('/api/questions').then((r) => r.json()).then((d) => {
+    BANK = d.questions;
+    pickers().forEach((sel, i) => {
+      sel.innerHTML = '';
+      BANK.forEach((q, n) => {
+        const opt = document.createElement('option');
+        opt.value = q.id;
+        opt.textContent = q.text;
+        if (n === i) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.onchange = refreshOptions;
+    });
+    refreshOptions();
+  });
+
+  $('#pane-signup').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $('#signup-go'), msg = $('#msg-signup');
+    btn.disabled = true; msg.textContent = '';
+    const body = {
+      email: $('#signup-email').value.trim(),
+      name: $('#signup-name').value.trim(),
+      username: $('#signup-username').value.trim(),
+      password: $('#signup-password').value,
+    };
+    [0, 1, 2].forEach((i) => {
+      body['question_' + i] = $('#question_' + i).value;
+      body['answer_' + i] = $('#answer_' + i).value;
+    });
+    const { ok, data } = await post('/api/signup', body);
+    if (!ok) { btn.disabled = false; msg.textContent = data.detail || 'That did not work.'; return; }
+    window.location = '/';
+  };
+
+  // --- recovery ---------------------------------------------------------
+  $('#recover-lookup').onclick = async () => {
+    const btn = $('#recover-lookup'), msg = $('#msg-recover');
+    btn.disabled = true; msg.textContent = '';
+    const { ok, data } = await post('/api/recover', {
+      identifier: $('#recover-id').value.trim(),
+    });
+    btn.disabled = false;
+    if (!ok) { msg.textContent = data.detail || 'That did not work.'; return; }
+    const box = $('#recover-questions');
+    box.innerHTML = '';
+    data.questions.forEach((q) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'q';
+      const label = document.createElement('label');
+      label.textContent = q.text;
+      label.htmlFor = 'recover_answer_' + q.idx;
+      const input = document.createElement('input');
+      input.id = 'recover_answer_' + q.idx;
+      input.dataset.idx = q.idx;
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+      box.appendChild(wrap);
+    });
+    $('#recover-step2').hidden = false;
+    $('#recover-lookup').hidden = true;
+    $('#recover-id').readOnly = true;
+  };
+
+  $('#pane-recover').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $('#recover-go'), msg = $('#msg-recover');
+    btn.disabled = true; msg.textContent = '';
+    const body = {
+      identifier: $('#recover-id').value.trim(),
+      password: $('#recover-password').value,
+    };
+    document.querySelectorAll('#recover-questions input').forEach((i) => {
+      body['answer_' + i.dataset.idx] = i.value;
+    });
+    const { ok, data } = await post('/api/recover/reset', body);
+    if (!ok) { btn.disabled = false; msg.textContent = data.detail || 'That did not work.'; return; }
     window.location = '/';
   };
 """
@@ -282,6 +387,7 @@ def page(message: str = "") -> str:
       <input id="password" name="password" type="password" autocomplete="current-password">
       <button class="go" type="submit">Sign in</button>
       {banner}
+      <button class="linkish" id="forgot" type="button">Forgotten your password?</button>
     </form>
 
     <form id="pane-signup" hidden>
@@ -293,14 +399,59 @@ def page(message: str = "") -> str:
       <input id="signup-username" autocomplete="username" required>
       <label for="signup-password">Choose a password</label>
       <input id="signup-password" type="password" autocomplete="new-password" required>
+
+      <p class="hint">
+        Three security questions. Your email is not verified, so these are the
+        only way back in if you forget your password. Pick answers you will
+        still give the same way in a year.
+      </p>
+
+      <div class="q">
+        <label for="question_0">Question 1</label>
+        <select id="question_0"></select>
+        <input id="answer_0" autocomplete="off" required>
+      </div>
+      <div class="q">
+        <label for="question_1">Question 2</label>
+        <select id="question_1"></select>
+        <input id="answer_1" autocomplete="off" required>
+      </div>
+      <div class="q">
+        <label for="question_2">Question 3</label>
+        <select id="question_2"></select>
+        <input id="answer_2" autocomplete="off" required>
+      </div>
+
       <button class="go" id="signup-go" type="submit">Create account</button>
       <div class="msg" id="msg-signup"></div>
       <p class="hint">
-        At least 8 characters. Your email is how you are identified and
-        contacted; it is not verified, so check it is right - there is no way
-        to recover the account through it.
+        Capitals and extra spaces do not matter when you answer. There is no
+        way to recover an account without these.
       </p>
     </form>
+
+    <form id="pane-recover" hidden>
+      <label for="recover-id">Username or email</label>
+      <input id="recover-id" autocomplete="username" required>
+      <button class="go" id="recover-lookup" type="button">Continue</button>
+
+      <div id="recover-step2" hidden>
+        <div id="recover-questions"></div>
+        <div class="q">
+          <label for="recover-password">Choose a new password</label>
+          <input id="recover-password" type="password" autocomplete="new-password" required>
+        </div>
+        <button class="go" id="recover-go" type="submit">Reset password</button>
+      </div>
+
+      <div class="msg" id="msg-recover"></div>
+      <button class="linkish" id="recover-back" type="button">Back to sign in</button>
+      <p class="hint">
+        All three answers must match. Resetting signs out anything already
+        signed in to the account.
+      </p>
+    </form>
+
   </aside>
 </div>
 

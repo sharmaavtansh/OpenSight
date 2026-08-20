@@ -26,6 +26,15 @@ CREATE TABLE IF NOT EXISTS patients (
     created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS security_answers (
+    patient_id  INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    idx         INTEGER NOT NULL,
+    question_id TEXT    NOT NULL,
+    answer_hash TEXT    NOT NULL,
+    salt        TEXT    NOT NULL,
+    PRIMARY KEY (patient_id, idx)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -126,6 +135,9 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("patients", "password_salt", "TEXT"),
     ("patients", "is_admin", "INTEGER NOT NULL DEFAULT 0"),
     ("patients", "email", "TEXT"),
+    # Bumped on a password reset, and carried in the session cookie: recovering
+    # an account has to evict whoever was already signed in to it.
+    ("patients", "session_version", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 # SQLite cannot add a UNIQUE column by ALTER, so the constraint is an index.

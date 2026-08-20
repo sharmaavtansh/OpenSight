@@ -248,6 +248,15 @@ async def signup(request: Request, conn: sqlite3.Connection = Depends(get_db)) -
     if problem:
         raise HTTPException(status_code=422, detail=problem)
 
+    # Three security questions, because without a verified address they are the
+    # only way back in after a forgotten password.
+    chosen, given = _answers_from(form)
+    problem = accounts.validate_question_set(chosen)
+    if problem:
+        raise HTTPException(status_code=422, detail=problem)
+    if any(len(accounts.normalise_answer(a)) < 2 for a in given):
+        raise HTTPException(status_code=422, detail="Answer all three questions.")
+
     if accounts.find_by_username(conn, username) is not None:
         raise HTTPException(status_code=409, detail="That username is taken.")
     if accounts.email_taken(conn, email):
@@ -260,9 +269,81 @@ async def signup(request: Request, conn: sqlite3.Connection = Depends(get_db)) -
     # nobody else who could have granted it.
     first = not accounts.accounts_exist(conn)
     row = accounts.create_account(conn, name, username, password, is_admin=first, email=email)
+    accounts.set_answers(conn, row["id"], list(zip(chosen, given)))
     accounts.clear_failures(key)
 
     response = JSONResponse({"ok": True, "account": accounts.public(row)})
+    _set_session(response, request, conn, row["id"])
+    return response
+
+
+def _answers_from(form: dict) -> tuple:
+    """The three (question id, answer) pairs, in order, from a flat form."""
+    chosen, given = [], []
+    for i in range(accounts.REQUIRED_ANSWERS):
+        chosen.append(str(form.get("question_%d" % i, "")).strip())
+        given.append(str(form.get("answer_%d" % i, "")))
+    return chosen, given
+
+
+@router.get("/api/questions")
+def question_bank() -> dict:
+    """The list to choose from at sign-up."""
+    return {"questions": accounts.QUESTIONS, "required": accounts.REQUIRED_ANSWERS}
+
+
+@router.post("/api/recover")
+async def recover_questions(
+    request: Request, conn: sqlite3.Connection = Depends(get_db)
+) -> Response:
+    """Which questions this account was asked. Answers are not involved yet."""
+    key = accounts.client_key(request)
+    if accounts.throttled(key):
+        raise HTTPException(status_code=429, detail="Too many attempts. Wait a few minutes.")
+
+    form = await _form(request)
+    row = accounts.find_for_recovery(conn, form.get("identifier", ""))
+    if row is None:
+        accounts.record_failure(key)
+        raise HTTPException(status_code=404, detail="No account with that username or email.")
+
+    questions = accounts.questions_for(conn, row["id"])
+    if len(questions) < accounts.REQUIRED_ANSWERS:
+        # Accounts created before security questions existed have no way back.
+        raise HTTPException(
+            status_code=409,
+            detail="This account has no security questions set, so it cannot be recovered.",
+        )
+    return JSONResponse({"questions": questions})
+
+
+@router.post("/api/recover/reset")
+async def recover_reset(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> Response:
+    """Answer all three, choose a new password, and every old session dies."""
+    key = accounts.client_key(request)
+    if accounts.throttled(key):
+        raise HTTPException(status_code=429, detail="Too many attempts. Wait a few minutes.")
+
+    form = await _form(request)
+    row = accounts.find_for_recovery(conn, form.get("identifier", ""))
+    password = form.get("password", "")
+    if row is None:
+        accounts.record_failure(key)
+        raise HTTPException(status_code=404, detail="No account with that username or email.")
+    if len(password) < 8:
+        raise HTTPException(status_code=422, detail="The password needs at least 8 characters.")
+
+    given = {i: str(form.get("answer_%d" % i, "")) for i in range(accounts.REQUIRED_ANSWERS)}
+    if not accounts.verify_answers(conn, row["id"], given):
+        accounts.record_failure(key)
+        # Which one was wrong is not said: it would let someone grind the
+        # answers one at a time instead of all three together.
+        raise HTTPException(status_code=401, detail="Those answers do not match.")
+
+    accounts.set_password(conn, row["id"], password)
+    accounts.clear_failures(key)
+
+    response = JSONResponse({"ok": True})
     _set_session(response, request, conn, row["id"])
     return response
 

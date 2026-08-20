@@ -102,6 +102,35 @@ third-party package on a machine a parent installs unattended.
 An install with no accounts has no gate at all, which is what the desktop
 launcher relies on. Creating the first account turns authentication on.
 
+#### Security questions
+
+Sign-up asks for three questions from a bank of ten, and three answers. They
+are the only way back into an account, because the email address is not
+verified and there is nothing to send a reset link to.
+
+The bank deliberately avoids the classic weak ones. A mother's maiden name, a
+first school or a pet's name are findable on social media or known to anyone
+who knows the family - which is exactly the person most likely to try. These
+ask for small private specifics with answers that do not change.
+
+- The three must be different; the pickers exclude each other so a collision
+  cannot be selected.
+- Answers are normalised for case and spacing before hashing, so `New  York`,
+  `new york` and ` New York ` all match. Nothing else is stripped: removing
+  punctuation would quietly merge answers meant to stay distinct.
+- Answers are hashed exactly like passwords - PBKDF2-HMAC-SHA256, per-answer
+  salt. They are never stored in the clear and never leave the server.
+- All three are checked even after one has failed, so the time taken does not
+  reveal which was wrong, and a failure never says which.
+- A reset bumps the account's session version, which is carried in the session
+  cookie. Every session issued before the reset stops working - including one
+  an intruder was still holding.
+
+They are a weaker second door than the password, as security questions always
+are: an answer is guessable in a way a password is not, and anyone who knows
+the person well enough may know all three. They exist because the alternative
+here is no recovery at all.
+
 #### What the email is, and is not
 
 The address is an identifier and a way to reach someone. It is **not

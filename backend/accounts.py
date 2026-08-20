@@ -51,6 +51,9 @@ OPEN_PATHS = {
     "/api/setup",
     "/api/auth/state",
     "/api/signup",
+    "/api/questions",
+    "/api/recover",
+    "/api/recover/reset",
     "/favicon.svg",
 }
 
@@ -92,9 +95,17 @@ def _server_secret(conn: sqlite3.Connection) -> bytes:
     return bytes.fromhex(stored)
 
 
+def _session_version(conn: sqlite3.Connection, account_id: int) -> int:
+    row = conn.execute(
+        "SELECT session_version FROM patients WHERE id = ?", (account_id,)
+    ).fetchone()
+    return int(row["session_version"]) if row else 1
+
+
 def issue_token(conn: sqlite3.Connection, account_id: int, now: float | None = None) -> str:
     expiry = int((now or time.time()) + SESSION_TTL_S)
-    payload = f"{account_id}.{expiry}"
+    version = _session_version(conn, account_id) if account_id > 0 else 1
+    payload = f"{account_id}.{version}.{expiry}"
     mac = hmac.new(_server_secret(conn), payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}.{mac}"
 
@@ -102,17 +113,22 @@ def issue_token(conn: sqlite3.Connection, account_id: int, now: float | None = N
 def read_token(conn: sqlite3.Connection, token: str, now: float | None = None) -> int | None:
     """The account id this token proves, or None."""
     try:
-        account_s, expiry_s, mac = token.split(".", 2)
+        account_s, version_s, expiry_s, mac = token.split(".", 3)
         account_id = int(account_s)
+        version = int(version_s)
         expiry = int(expiry_s)
     except (ValueError, AttributeError):
         return None
     if expiry < (now or time.time()):
         return None
     expected = hmac.new(
-        _server_secret(conn), f"{account_s}.{expiry_s}".encode(), hashlib.sha256
+        _server_secret(conn), f"{account_s}.{version_s}.{expiry_s}".encode(), hashlib.sha256
     ).hexdigest()
     if not hmac.compare_digest(mac, expected):
+        return None
+    # A password reset bumps the account's version, which retires every cookie
+    # issued before it - including one an intruder was still holding.
+    if account_id > 0 and version != _session_version(conn, account_id):
         return None
     return account_id
 
@@ -201,6 +217,124 @@ def record_failure(key: str) -> None:
 
 def clear_failures(key: str) -> None:
     _failures.pop(key, None)
+
+
+# ---------------------------------------------------- security questions
+
+REQUIRED_ANSWERS = 3
+
+# Chosen to avoid the classic weak ones. A mother's maiden name, a first school
+# or a pet's name are findable on social media or known to anyone who knows the
+# family, which is exactly the person most likely to try. These ask for small
+# private specifics instead, and each has an answer that does not change.
+QUESTIONS: list[dict[str, str]] = [
+    {"id": "street_number", "text": "What was the house number of your childhood home?"},
+    {"id": "first_employer", "text": "What was the name of your first employer?"},
+    {"id": "childhood_friend", "text": "What was the first name of your closest childhood friend?"},
+    {"id": "first_concert", "text": "What was the first live performance you attended?"},
+    {"id": "grandparent_town", "text": "In what town did your grandparents live?"},
+    {"id": "first_dish", "text": "What was the first dish you learned to cook?"},
+    {"id": "old_phone", "text": "What were the last four digits of your childhood phone number?"},
+    {"id": "favourite_teacher", "text": "What was the surname of your favourite teacher?"},
+    {"id": "first_trip", "text": "Where did you go on your first trip abroad?"},
+    {"id": "book_reread", "text": "Which book have you read more than any other?"},
+]
+
+QUESTION_IDS = {q["id"] for q in QUESTIONS}
+QUESTION_TEXT = {q["id"]: q["text"] for q in QUESTIONS}
+
+
+def normalise_answer(answer: str) -> str:
+    """Case and spacing must not decide whether someone gets back in.
+
+    "New  York", "new york" and " New York " are the same answer. Everything
+    else is left alone: stripping punctuation would quietly merge answers the
+    person meant to keep distinct.
+    """
+    return " ".join(answer.strip().lower().split())
+
+
+def set_answers(conn: sqlite3.Connection, patient_id: int, answers: list) -> None:
+    """Replaces any existing set. Answers are hashed exactly like passwords."""
+    conn.execute("DELETE FROM security_answers WHERE patient_id = ?", (patient_id,))
+    for idx, (question_id, answer) in enumerate(answers):
+        digest, salt = hash_password(normalise_answer(answer))
+        conn.execute(
+            "INSERT INTO security_answers (patient_id, idx, question_id, answer_hash, salt) "
+            "VALUES (?,?,?,?,?)",
+            (patient_id, idx, question_id, digest, salt),
+        )
+    conn.commit()
+
+
+def questions_for(conn: sqlite3.Connection, patient_id: int) -> list:
+    rows = conn.execute(
+        "SELECT idx, question_id FROM security_answers WHERE patient_id = ? ORDER BY idx",
+        (patient_id,),
+    ).fetchall()
+    return [
+        {"idx": r["idx"], "id": r["question_id"], "text": QUESTION_TEXT.get(r["question_id"], "")}
+        for r in rows
+    ]
+
+
+def verify_answers(conn: sqlite3.Connection, patient_id: int, given: dict) -> bool:
+    """All of them, or none.
+
+    Every stored answer is checked even after one has failed, so how long this
+    takes does not reveal which one was wrong.
+    """
+    rows = conn.execute(
+        "SELECT idx, answer_hash, salt FROM security_answers WHERE patient_id = ? ORDER BY idx",
+        (patient_id,),
+    ).fetchall()
+    if len(rows) < REQUIRED_ANSWERS:
+        return False
+    ok = True
+    for row in rows:
+        supplied = normalise_answer(given.get(row["idx"], ""))
+        if not verify_password(supplied, row["answer_hash"], row["salt"]):
+            ok = False
+    return ok
+
+
+def validate_question_set(chosen: list) -> str:
+    if len(chosen) != REQUIRED_ANSWERS:
+        return "Choose %d questions." % REQUIRED_ANSWERS
+    if len(set(chosen)) != REQUIRED_ANSWERS:
+        return "Choose three different questions."
+    if any(q not in QUESTION_IDS for q in chosen):
+        return "That is not one of the available questions."
+    return ""
+
+
+def bump_session_version(conn: sqlite3.Connection, patient_id: int) -> None:
+    conn.execute(
+        "UPDATE patients SET session_version = session_version + 1 WHERE id = ?", (patient_id,)
+    )
+    conn.commit()
+
+
+def set_password(conn: sqlite3.Connection, patient_id: int, password: str) -> None:
+    digest, salt = hash_password(password)
+    conn.execute(
+        "UPDATE patients SET password_hash = ?, password_salt = ? WHERE id = ?",
+        (digest, salt, patient_id),
+    )
+    # Everything signed in under the old password stops working now.
+    bump_session_version(conn, patient_id)
+
+
+def find_for_recovery(conn: sqlite3.Connection, identifier: str):
+    """Username or email - people remember one or the other, rarely both."""
+    identifier = identifier.strip()
+    row = find_by_username(conn, identifier)
+    if row is not None:
+        return row
+    return conn.execute(
+        "SELECT * FROM patients WHERE email = ? AND username IS NOT NULL",
+        (normalise_email(identifier),),
+    ).fetchone()
 
 
 # ------------------------------------------------------- signup by email
