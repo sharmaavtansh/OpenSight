@@ -311,11 +311,12 @@ py -3.11 test.py
 
 Runs everything: the clinical maths, every endpoint, and all twenty activities.
 It starts its own server on a throwaway database, so nothing needs to be
-running first and the real data is never touched. 305 checks.
+running first and the real data is never touched. 322 checks.
 
 | Suite | What it covers |
 |---|---|
 | `tests/test_logic.py` | Optotype geometry, display calibration, difficulty scaling, palette resolution, the acuity staircase, the prescription rules, glasses isolation verdicts |
+| `tests/test_fuzz.py` | 51 malformed and boundary requests against every endpoint; a 5xx is always a bug |
 | `tests/test_api.py` | Every endpoint, on an open install and a gated one: the catalogue, a session start-to-finish, a full assessment, settings round-trips, sign-up, sign-in, recovery, and cross-account isolation |
 | `web/harness/games.ts` | All twenty activities driven headlessly for hundreds of frames |
 | `web/harness/tracing.ts` | The tracing toolbar: picker, pen, eraser, clear |

@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 import runner  # noqa: E402
 import test_api  # noqa: E402
+import test_fuzz  # noqa: E402
 import test_logic  # noqa: E402
 
 
@@ -51,7 +52,9 @@ def main() -> int:
         # from, and the API suite creates accounts - which turns the gate on.
         # So they run first, while the install is still open.
         code |= frontend()
-        code |= runner.run(list(test_logic.SUITES) + list(test_api.SUITES))
+        code |= runner.run(
+            list(test_logic.SUITES) + list(test_fuzz.SUITES) + list(test_api.SUITES)
+        )
     finally:
         test_api.stop_server()
         shutil.rmtree(test_api.DATA, ignore_errors=True)

@@ -184,6 +184,11 @@ export const useApp = create<AppState>((set, get) => ({
     }),
 
   launch: async (activity) => {
+    // The card's `disabled` prop only takes effect on the next render, so a
+    // fast double-click called this twice and started two sessions - the
+    // second replacing the first, which was left running in the database
+    // forever. Zustand reads are synchronous, so this guard actually holds.
+    if (get().starting !== null) return
     const { modeId, difficulty, acuity, duration } = get()
     set({ starting: activity.id, error: null })
     try {

@@ -42,7 +42,14 @@ export function GameHost({ plan }: { plan: SessionPlan }) {
   const leftLens = channels[leftFilter] ?? '#e02020'
   const rightLens = channels[rightFilter] ?? '#2020e0'
 
+  const finishing = useRef(false)
+
   const finish = async (trials: Trial[], elapsedS: number, status: 'completed' | 'aborted') => {
+    // The clock expiring and the patient pressing stop can both land here, and
+    // a second call would post another set of trials against a session that is
+    // already closed. A ref, because this has to hold within one tick.
+    if (finishing.current) return
+    finishing.current = true
     try {
       const summary = await api.finishSession(plan.session_id, {
         elapsed_s: elapsedS,

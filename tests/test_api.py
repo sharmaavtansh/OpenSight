@@ -419,4 +419,82 @@ def test_recovery() -> None:
     check("the new password works", status == 303, str(status))
 
 
-SUITES = [test_open_install, test_accounts_and_isolation, test_recovery]
+def test_concurrency() -> None:
+    """One presented optotype must produce exactly one recorded answer.
+
+    Two responses arriving before the first was written both computed the same
+    sequence number and both inserted, so a single presentation was recorded
+    two or three times - and the 3-of-5 pass threshold was then judged against
+    trials the patient never saw. The unique index on (assessment_id, seq) is
+    what makes a duplicate detectable instead of silently plausible.
+    """
+    import sqlite3
+    import threading
+
+    group("concurrency: one answer per presentation")
+    c = Client()
+    status, start = c.post("/api/assessments", {"kind": "baseline"})
+    check("an assessment starts", status == 200, str(status))
+    assert isinstance(start, dict)
+    aid = start["assessment_id"]
+
+    results: list[tuple[int, object]] = []
+    lock = threading.Lock()
+
+    def answer() -> None:
+        own = Client()
+        own.jar = c.jar  # same session
+        own.opener = c.opener
+        # Every thread answers the SAME presentation, which is what a double
+        # press produces: one letter on screen, several answers dispatched.
+        out = own.post(f"/api/assessments/{aid}/respond", {"direction": "right", "seq": 0})
+        with lock:
+            results.append(out)
+
+    threads = [threading.Thread(target=answer) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    accepted = [r for r in results if isinstance(r[1], dict) and not r[1].get("duplicate")]
+    duplicates = [r for r in results if isinstance(r[1], dict) and r[1].get("duplicate")]
+    check("all six responses are answered", len(results) == 6, str(len(results)))
+    equal("exactly one is accepted", len(accepted), 1)
+    equal("the other five are reported as duplicates", len(duplicates), 5)
+
+    db = sqlite3.connect(str(DATA / "opensight.db"))
+    db.row_factory = sqlite3.Row
+    seqs = [r["seq"] for r in db.execute(
+        "SELECT seq FROM assessment_trials WHERE assessment_id = ?", (aid,)
+    )]
+    db.close()
+    equal("only one trial reached the database", len(seqs), 1)
+    check("and its sequence number is unique", len(seqs) == len(set(seqs)), str(seqs))
+
+
+def test_dev_tools() -> None:
+    """The snapshot endpoint writes attacker-chosen bytes to disk and the
+    shipped app never calls it, so it must be off unless asked for."""
+    group("dev tools: the snapshot endpoint is off by default")
+    c = Client()
+    status, _ = c.post("/api/dev/snapshot", {
+        "name": "probe", "data_url": "data:image/png;base64,aGVsbG8=",
+    })
+    equal("posting a snapshot is 404 when dev tools are off", status, 404)
+
+    group("dev tools: names cannot escape the directory")
+    for bad in ("../escape", "..\escape", "a/b", "with space", "x" * 65, ""):
+        status, _ = c.post("/api/dev/snapshot", {
+            "name": bad, "data_url": "data:image/png;base64,aGVsbG8=",
+        })
+        check(f"name {bad[:14]!r} is refused", status in (404, 422), str(status))
+
+
+SUITES = [
+    test_open_install,
+    test_concurrency,
+    test_dev_tools,
+    test_accounts_and_isolation,
+    test_recovery,
+]

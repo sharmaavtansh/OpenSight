@@ -146,6 +146,12 @@ INDICES: list[str] = [
     "ON patients(username) WHERE username IS NOT NULL",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_patients_email "
     "ON patients(email) WHERE email IS NOT NULL",
+    # One answer per presented optotype. Two responses arriving before the
+    # first has been written both computed the same sequence number and both
+    # inserted, so a single presentation was recorded two or three times and
+    # the 3-of-5 threshold was judged against trials the patient never saw.
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_assessment_trials_seq "
+    "ON assessment_trials(assessment_id, seq)",
     # Signup no longer sends a code. Anything still sitting in this table is a
     # half-finished signup from the previous scheme and means nothing now.
     "DROP TABLE IF EXISTS signup_codes",

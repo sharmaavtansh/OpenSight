@@ -159,3 +159,8 @@ class AssessmentResponse(BaseModel):
     direction: Literal["right", "down", "left", "up"]
     rt_ms: float | None = None
     device_pixel_ratio: float | None = Field(None, gt=0, le=8)
+    # Which presentation this answers. Without it the server cannot tell an
+    # answer to the letter on screen from a second answer that arrived while
+    # the first was still in flight - and the second would be recorded against
+    # an optotype the patient was never shown.
+    seq: int | None = Field(None, ge=0)

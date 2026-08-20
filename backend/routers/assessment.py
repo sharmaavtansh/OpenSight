@@ -178,19 +178,45 @@ def respond(
         raise HTTPException(status_code=409, detail="assessment already complete")
 
     eye, condition, denominator, phase = step
+
+    # An answer names the presentation it belongs to. Anything else is stale:
+    # a double press, a retried request, or a client that fell behind. It is
+    # dropped rather than recorded, because a second answer to one optotype is
+    # not a measurement.
+    if payload.seq is not None and payload.seq != len(rows):
+        result = _next_payload(
+            assessment_id, row["seed"], rows, conn, payload.device_pixel_ratio, row["patient_id"]
+        )
+        result["duplicate"] = True
+        return result
+
     rng = random.Random(f"{row['seed']}:{len(rows)}")
     target = rng.choice(DIRECTIONS)
     correct = 1 if payload.direction == target else 0
 
-    conn.execute(
-        """INSERT INTO assessment_trials
-           (assessment_id, seq, eye, condition, denominator, target, response, correct,
-            phase, rt_ms)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        (assessment_id, len(rows), eye, condition, denominator, target,
-         payload.direction, correct, phase, payload.rt_ms),
-    )
-    conn.commit()
+    try:
+        conn.execute(
+            """INSERT INTO assessment_trials
+               (assessment_id, seq, eye, condition, denominator, target, response, correct,
+                phase, rt_ms)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (assessment_id, len(rows), eye, condition, denominator, target,
+             payload.direction, correct, phase, payload.rt_ms),
+        )
+        conn.commit()
+    except sqlite3.IntegrityError:
+        # Another response for this same presentation got here first. A second
+        # answer to one optotype is not data - the patient saw the letter once -
+        # so it is dropped rather than recorded, and the caller is told where
+        # the run actually is. The unique index on (assessment_id, seq) is what
+        # makes this detectable at all.
+        conn.rollback()
+        rows = _trials(assessment_id, conn)
+        result = _next_payload(
+            assessment_id, row["seed"], rows, conn, payload.device_pixel_ratio, row["patient_id"]
+        )
+        result["duplicate"] = True
+        return result
 
     rows = _trials(assessment_id, conn)
     result = _next_payload(

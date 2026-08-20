@@ -101,6 +101,10 @@ export function AssessmentScreen() {
   const [busy, setBusy] = useState(false)
   const [measuredAt, setMeasuredAt] = useState<string | null>(null)
   const shownAt = useRef(0)
+  /** In-flight guard. Deliberately a ref, not the `busy` state: two keydowns
+   *  in the same tick both read the pre-render value of a state variable, so
+   *  both passed the check and both answered the same presented optotype. */
+  const inFlight = useRef(false)
 
   /** Leaving mid-run throws away a part-finished measurement, so it asks first.
    *  Registered in the capture phase to beat the app-wide Escape handler, which
@@ -142,6 +146,11 @@ export function AssessmentScreen() {
   }, [])
 
   const start = async () => {
+    // Same reason as `answer`: `busy` is state, and a second click arriving
+    // before the re-render would start a second assessment and orphan the
+    // first. The ref is checked and set in the same tick.
+    if (inFlight.current) return
+    inFlight.current = true
     setError(null)
     setBusy(true)
     try {
@@ -161,13 +170,15 @@ export function AssessmentScreen() {
     } catch (err) {
       setError((err as Error).message)
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
 
   const answer = useCallback(
     async (direction: Direction) => {
-      if (!assessmentId || busy) return
+      if (!assessmentId || inFlight.current) return
+      inFlight.current = true
       setBusy(true)
       try {
         const res = await fetch(`/api/assessments/${assessmentId}/respond`, {
@@ -175,6 +186,10 @@ export function AssessmentScreen() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             direction,
+            // Names the presentation being answered, so the server can drop a
+            // stale answer instead of recording it against a letter that was
+            // never shown.
+            seq: trial?.seq,
             rt_ms: performance.now() - shownAt.current,
             device_pixel_ratio: window.devicePixelRatio || 1,
           }),
@@ -204,10 +219,15 @@ export function AssessmentScreen() {
       } catch (err) {
         setError((err as Error).message)
       } finally {
+        inFlight.current = false
         setBusy(false)
       }
     },
-    [assessmentId, busy],
+    // `trial` IS a dependency: the callback sends its `seq` to name the
+    // presentation being answered, so it has to be the letter currently on
+    // screen. Leaving it out froze `seq` at the first trial and every later
+    // answer would have been rejected as stale.
+    [assessmentId, trial],
   )
 
   useEffect(() => {
