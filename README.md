@@ -59,6 +59,53 @@ API docs are at `/docs`.
 
 ---
 
+## Deploying
+
+The app ships as a container: Node builds the UI, Python serves it. There is no
+Node in the runtime image.
+
+```bash
+fly auth login
+fly launch --no-deploy
+fly volumes create opensight_data --size 1
+fly secrets set OPENSIGHT_PASSWORD='choose-something-long'
+fly deploy
+```
+
+Two constraints are not negotiable.
+
+**One machine.** SQLite has no coordination between hosts, so a second machine
+writing the same volume corrupts the database. `fly scale count 2` breaks this
+app; scaling it means moving to Postgres first.
+
+**The volume is the database.** A container filesystem is discarded on every
+deploy. Without `opensight_data` mounted at `/data`, every deploy silently
+starts from an empty database and the patient history is gone.
+
+### The password
+
+There are no user accounts. Every endpoint trusts whoever can reach it, which
+is correct for one family on one machine and wrong on a public URL, where the
+patient table holds names, dates of birth and notes.
+
+`OPENSIGHT_PASSWORD` puts one shared password in front of everything. Unset, the
+gate does nothing, so the desktop launcher needs no password. Set, every route
+except `/api/health` needs a session cookie signed with a key derived from the
+password - so sessions survive a restart, and changing the password ends all of
+them. Five failures from one address triggers a five-minute backoff.
+
+It is a lock on the front door, not a user system: everyone who gets in shares
+one identity and sees everything.
+
+One consequence worth stating plainly, because it is not a privacy problem but
+a correctness one: **display calibration is global**. Screen size, pixel pitch
+and anaglyph colours are stored once for the whole instance. If two people use
+one deployment from different screens, the second recalibration silently
+changes the first person's optotype sizes, and their acuity numbers stop
+meaning what they say. One instance per display.
+
+---
+
 ## Why the Python side is not just a static file server
 
 Four things are deliberately server-side, because getting them wrong is a

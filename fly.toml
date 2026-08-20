@@ -1,0 +1,40 @@
+# OpenSight on Fly.io
+app = "opensight"
+primary_region = "bom"
+
+[build]
+
+[env]
+  OPENSIGHT_DATA_DIR = "/data"
+  OPENSIGHT_HOST = "0.0.0.0"
+  OPENSIGHT_PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_start_machines = true
+  # Suspend rather than stop: a suspended machine resumes in about a second,
+  # so the first visitor after a quiet spell is not left staring at a blank tab.
+  auto_stop_machines = "suspend"
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/api/health"
+
+# The SQLite database lives here. Without this mount every deploy would start
+# from an empty database, because a container filesystem does not survive one.
+[[mounts]]
+  source = "opensight_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  # Exactly one machine, deliberately. SQLite has no coordination between
+  # hosts: a second machine writing the same volume corrupts the database.
+  # Scaling this app means a real database first, not `fly scale count`.

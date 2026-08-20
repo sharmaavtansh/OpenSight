@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__
 from .config import BASE_DIR
 from .db import init_db
+from . import auth
 from .routers import (
     assessment,
     catalog,
@@ -58,6 +59,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Registered after CORS, which in Starlette means it runs first: refuse an
+# unauthenticated request before any router touches the database.
+app.middleware("http")(auth.gate)
+app.include_router(auth.router)
 
 app.include_router(settings.router)
 app.include_router(catalog.router)

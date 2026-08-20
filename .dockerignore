@@ -1,0 +1,13 @@
+.git/
+.tools/
+node_modules/
+web/node_modules/
+web/dist/
+data/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.map
+opensight.bat
+run.py
+README.md
