@@ -1,0 +1,1276 @@
+/* Sloan: the standard optotype face used on Snellen/logMAR charts. It only
+   contains the ten Sloan letters (C D H K N O R S V Z); anything else falls
+   back per-glyph, which is exactly what we want - optotypes are drawn to the
+   real chart geometry and ordinary UI text is not. */
+@font-face {
+  font-family: 'Sloan';
+  src: url('/fonts/Sloan.otf') format('opentype');
+  font-display: block;
+}
+
+/* OpenSight - Home Edition
+   Shell chrome. Game surfaces paint themselves on canvas and deliberately
+   ignore this palette, since their colours come from the anaglyph calibration. */
+
+:root {
+  --navy-900: #050826;
+  --navy-800: #0a1046;
+  --navy-700: #101a5c;
+  --navy-600: #16215e;
+  --ink: #04050f;
+  --purple: #6c4fe0;
+  --purple-dim: #4c37a5;
+  --orange: #ef5b2b;
+  --orange-dark: #d94a1d;
+  --chip-blue: #1d3480;
+  --text: #ffffff;
+  --text-dim: #b9c0e8;
+  --rail-w: 342px;
+  --sub-w: 354px;
+  --header-h: 118px;
+
+  --font-display: 'Bahnschrift', 'DIN Alternate', 'Segoe UI Semibold', system-ui, sans-serif;
+  --font-ui: 'Bahnschrift', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-ui);
+  color: var(--text);
+  background: var(--navy-900);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------- shell -- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background:
+    radial-gradient(1200px 700px at 18% 78%, rgba(30, 52, 150, 0.55), transparent 62%),
+    linear-gradient(155deg, #0b1150 0%, #080d38 45%, #05071f 100%);
+}
+
+/* Faint dot field in the lower-left. */
+.app::before {
+  content: '';
+  position: fixed;
+  inset: var(--header-h) 0 0 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(120, 150, 255, 0.16) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(760px 460px at 20% 88%, #000 0%, transparent 72%);
+  -webkit-mask-image: radial-gradient(760px 460px at 20% 88%, #000 0%, transparent 72%);
+}
+
+/* --------------------------------------------------------------- header -- */
+
+.header {
+  position: relative;
+  z-index: 3;
+  height: var(--header-h);
+  flex: 0 0 var(--header-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 34px;
+  background: var(--ink);
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand__name {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  line-height: 1;
+}
+
+.brand__name em {
+  font-style: normal;
+  color: #2f7bff;
+}
+
+.brand__edition {
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  color: #d6dbf5;
+  padding-left: 42px;
+}
+
+.header__actions {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+
+.icon-btn {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+
+.icon-btn:hover {
+  transform: translateY(-1px);
+  opacity: 0.85;
+}
+
+.icon-btn--active {
+  color: #7fa8ff;
+}
+
+.icon-btn--close {
+  border: 2px solid #fff;
+  border-radius: 50%;
+}
+
+/* ----------------------------------------------------------------- body -- */
+
+.body {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: grid;
+  grid-template-columns: var(--rail-w) var(--sub-w) 1fr;
+  min-height: 0;
+}
+
+.rail {
+  padding: 28px 24px 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rail__title,
+.subnav__title {
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  padding: 12px 20px 20px;
+  color: #fff;
+}
+
+.rail__item,
+.subnav__item {
+  text-align: left;
+  font-size: 25px;
+  letter-spacing: 0.5px;
+  padding: 16px 22px;
+  border-radius: 10px;
+  color: #fff;
+  transition: background 0.14s ease;
+}
+
+.rail__item:hover,
+.subnav__item:hover {
+  background: rgba(108, 79, 224, 0.28);
+}
+
+.rail__item--active,
+.subnav__item--active {
+  background: var(--purple);
+}
+
+.subnav {
+  padding: 28px 0 0 0;
+  background: rgba(10, 16, 70, 0.55);
+  display: flex;
+  flex-direction: column;
+}
+
+.subnav__title {
+  padding-left: 28px;
+}
+
+.subnav__item {
+  border-radius: 0;
+  padding-left: 28px;
+}
+
+/* ----------------------------------------------------------------- main -- */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding-right: 8px;
+}
+
+.crumb {
+  background: var(--purple);
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  padding: 16px 26px;
+}
+
+/* ------------------------------------------------------------- controls -- */
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 14px 20px;
+  background: rgba(6, 10, 42, 0.5);
+  border-bottom: 1px solid rgba(120, 140, 220, 0.14);
+  flex-wrap: wrap;
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 20px;
+}
+
+.control + .control {
+  border-left: 1px solid rgba(140, 160, 230, 0.22);
+  padding-left: 22px;
+}
+
+.control__value {
+  min-width: 26px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.control__unit {
+  color: var(--text-dim);
+}
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 112px;
+  height: 4px;
+  border-radius: 4px;
+  background: #cdd4f0;
+  outline: none;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--purple);
+  cursor: pointer;
+}
+
+select {
+  font: inherit;
+  font-size: 17px;
+  color: #12162e;
+  background: #f3f4fb;
+  border: 1px solid #b9bfd8;
+  border-radius: 4px;
+  padding: 5px 8px;
+  min-width: 150px;
+  cursor: pointer;
+}
+
+.swatches {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  margin-left: auto;
+  padding-left: 22px;
+}
+
+.swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  color: var(--text-dim);
+}
+
+.swatch__dot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.swatch__dot:hover {
+  transform: scale(1.08);
+}
+
+.swatch--active .swatch__dot {
+  border-color: #fff;
+}
+
+.bg-toggle {
+  font-size: 18px;
+  color: #12162e;
+  background: #f3f4fb;
+  border-radius: 4px;
+  padding: 9px 16px;
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------- grid -- */
+
+.grid-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 40px 20px;
+}
+
+.grid-scroll::-webkit-scrollbar {
+  width: 12px;
+}
+
+.grid-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.grid-scroll::-webkit-scrollbar-thumb {
+  background: #c9cfe8;
+  border-radius: 6px;
+}
+
+.group {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.group__label {
+  background: var(--chip-blue);
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+}
+
+.group__label span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 16px;
+  letter-spacing: 1.5px;
+  color: #d9e0ff;
+}
+
+.group__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(258px, 1fr));
+  gap: 14px;
+  align-content: start;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 96px;
+  padding: 0 18px;
+  border-radius: 10px;
+  background: var(--orange);
+  text-align: left;
+  transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease;
+}
+
+.card:hover {
+  filter: brightness(0.88);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+
+.card:disabled {
+  opacity: 0.55;
+  cursor: progress;
+  transform: none;
+}
+
+.card__icon {
+  flex: 0 0 auto;
+  width: 58px;
+  height: 58px;
+  border-radius: 9px;
+  background: #f7f5f2;
+  display: grid;
+  place-items: center;
+  color: var(--orange);
+}
+
+.card__icon svg {
+  width: 38px;
+  height: 38px;
+}
+
+.card__icon-letter {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+  color: #24314f;
+}
+
+.card__title {
+  font-size: 19px;
+  line-height: 1.22;
+  letter-spacing: 0.3px;
+  white-space: pre-line;
+}
+
+/* ---------------------------------------------------------- status bits -- */
+
+.status {
+  padding: 40px;
+  font-size: 20px;
+  color: var(--text-dim);
+}
+
+.status--error {
+  color: #ff9c8a;
+}
+
+.banner {
+  margin: 12px 20px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: rgba(239, 91, 43, 0.16);
+  border: 1px solid rgba(239, 91, 43, 0.5);
+  color: #ffd7c9;
+  font-size: 16px;
+}
+
+.banner a,
+.banner button {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.banner--action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background: rgba(47, 123, 255, 0.16);
+  border-color: rgba(47, 123, 255, 0.55);
+  color: #d9e6ff;
+}
+
+.banner--action button {
+  flex: 0 0 auto;
+  background: #2f7bff;
+  color: #fff;
+  border-radius: 20px;
+  padding: 8px 20px;
+  font-size: 15px;
+  text-decoration: none;
+}
+
+/* ===========================================================================
+   OpenSight look
+   ---------------------------------------------------------------------------
+   A restyle, not a recolour. Every value below changes geometry, spacing,
+   weight or structure; the palette tokens declared at the top of this file are
+   used verbatim and nothing here introduces a new hue. Game surfaces are not
+   touched at all - their colours come from the anaglyph calibration and are
+   clinical, not decorative.
+   =========================================================================== */
+
+/* --- header: lighter, with the brand given room ------------------------- */
+
+.header {
+  height: 104px;
+  flex-basis: 104px;
+  padding: 0 30px;
+  border-bottom: 1px solid rgba(120, 140, 220, 0.16);
+}
+
+.brand__name {
+  font-size: 34px;
+  letter-spacing: -0.5px;
+}
+
+.brand__edition {
+  padding-left: 2px;
+  font-size: 12px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  opacity: 0.62;
+}
+
+.header__actions {
+  gap: 10px;
+}
+
+.icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 140, 220, 0.22);
+}
+
+.icon-btn:hover {
+  transform: none;
+  opacity: 1;
+  background: rgba(120, 140, 220, 0.14);
+}
+
+.icon-btn--close {
+  border-radius: 12px;
+  border: 1px solid rgba(120, 140, 220, 0.22);
+}
+
+/* --- rails: an indicator bar instead of a filled pill ------------------- */
+
+.rail {
+  padding: 22px 18px 0 22px;
+  gap: 4px;
+}
+
+.rail__title,
+.subnav__title {
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  opacity: 0.5;
+  padding: 8px 14px 14px;
+}
+
+.rail__item,
+.subnav__item {
+  position: relative;
+  font-size: 19px;
+  padding: 13px 18px;
+  border-radius: 12px;
+  transition: background 0.14s ease, padding 0.14s ease;
+}
+
+.rail__item--active,
+.subnav__item--active {
+  background: rgba(108, 79, 224, 0.2);
+  padding-left: 26px;
+}
+
+.rail__item--active::before,
+.subnav__item--active::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--purple);
+}
+
+.subnav {
+  background: transparent;
+  border-left: 1px solid rgba(120, 140, 220, 0.14);
+  border-right: 1px solid rgba(120, 140, 220, 0.14);
+  padding: 22px 14px 0;
+}
+
+.subnav__title {
+  padding-left: 14px;
+}
+
+.subnav__item {
+  border-radius: 12px;
+  padding-left: 18px;
+}
+
+/* --- breadcrumb: a quiet heading rather than a solid slab --------------- */
+
+.crumb {
+  background: transparent;
+  padding: 22px 26px 10px;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.crumb::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(120, 140, 220, 0.2);
+}
+
+/* --- control bar: one grouped panel ------------------------------------- */
+
+.controls {
+  margin: 0 24px 18px 20px;
+  padding: 14px 18px;
+  border: 1px solid rgba(120, 140, 220, 0.18);
+  border-radius: 16px;
+  background: rgba(10, 16, 70, 0.42);
+  gap: 18px;
+}
+
+.control + .control {
+  border-left: 1px solid rgba(120, 140, 220, 0.18);
+  padding-left: 18px;
+}
+
+.control {
+  font-size: 15px;
+  letter-spacing: 0.3px;
+}
+
+select {
+  border-radius: 9px;
+  padding: 7px 10px;
+}
+
+.swatch__dot {
+  width: 26px;
+  height: 26px;
+}
+
+.bg-toggle {
+  border-radius: 9px;
+  font-size: 15px;
+}
+
+/* --- groups: horizontal section headers, not rotated chips -------------- */
+
+.group {
+  display: block;
+  margin-bottom: 30px;
+}
+
+.group__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 4px 12px;
+}
+
+.group__name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2.2px;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.group__rule {
+  flex: 1;
+  height: 1px;
+  background: rgba(120, 140, 220, 0.22);
+}
+
+.group__count {
+  font-size: 12px;
+  letter-spacing: 1px;
+  opacity: 0.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.group__cards {
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  gap: 12px;
+}
+
+/* --- cards: taller, softer, with an affordance ------------------------- */
+
+.card {
+  height: 104px;
+  padding: 0 16px 0 14px;
+  border-radius: 16px;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.14) inset;
+}
+
+.card:hover {
+  filter: brightness(0.92);
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.14) inset,
+    0 10px 24px rgba(0, 0, 0, 0.4);
+}
+
+.card:active {
+  transform: translateY(0);
+}
+
+.card__icon {
+  width: 62px;
+  height: 62px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.card__icon svg {
+  width: 34px;
+  height: 34px;
+}
+
+.card__title {
+  flex: 1;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.28;
+  letter-spacing: 0.1px;
+}
+
+/* A chevron that only resolves on hover: present, but not shouting. */
+.card__go {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.card:hover .card__go {
+  opacity: 0.85;
+  transform: translateX(0);
+}
+
+.grid-scroll {
+  padding: 4px 24px 40px 20px;
+}
+
+.grid-scroll::-webkit-scrollbar-thumb {
+  background: rgba(201, 207, 232, 0.5);
+  border-radius: 8px;
+}
+
+.grid-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* =======================================================================
+   Navigation
+   Structure only. Every colour below is either `currentColor`, an existing
+   palette token, or the rgba(120, 140, 220, x) hairline already used above -
+   no new hue is introduced anywhere in this block.
+   ======================================================================= */
+
+/* The wordmark doubles as "home" everywhere except home itself. */
+.brand {
+  align-items: flex-start;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 4px 8px 4px 0;
+  border-radius: 12px;
+  cursor: pointer;
+  color: inherit;
+  transition: opacity 0.12s ease;
+}
+
+.brand:hover {
+  opacity: 0.86;
+}
+
+/* Icons keep their glyph but gain a word. Four unlabelled squares in a row
+   is a memory test; a parent opening this once a day should not have to sit
+   through one. */
+.icon-btn {
+  width: auto;
+  min-width: 46px;
+  height: 46px;
+  grid-auto-flow: column;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.icon-btn__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The active destination reads as a state, not just a tint: it also carries
+   an underline so it survives being looked at quickly. */
+.icon-btn--active {
+  position: relative;
+  background: rgba(120, 140, 220, 0.14);
+}
+
+.icon-btn--active::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+/* Back and Exit must never look alike - one is reversible, one is not. */
+.icon-btn--back {
+  border-style: solid;
+}
+
+.icon-btn--close:not(.icon-btn--back) {
+  border-style: dashed;
+}
+
+@media (max-width: 1080px) {
+  .icon-btn__label {
+    display: none;
+  }
+  .icon-btn {
+    width: 46px;
+    padding: 0;
+  }
+}
+
+/* --- sub-screen bar: where am I, and how do I get out ------------------- */
+.pagebar {
+  width: min(1180px, 100%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 22px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(120, 140, 220, 0.18);
+}
+
+.pagebar__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 140, 220, 0.28);
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+.pagebar__back:hover {
+  background: rgba(120, 140, 220, 0.16);
+  transform: translateX(-2px);
+}
+
+.pagebar__trail {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pagebar__trail i {
+  font-style: normal;
+  margin: 0 8px;
+  opacity: 0.5;
+}
+
+.pagebar__trail strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.pagebar__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Advertises the shortcut rather than hiding it in a tooltip. */
+.pagebar__kbd {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(120, 140, 220, 0.28);
+  color: var(--text-dim);
+}
+
+@media (max-width: 760px) {
+  .pagebar__kbd {
+    display: none;
+  }
+}
+
+/* --- exit from a full-screen calibration step --------------------------- */
+.overlay-exit {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px 7px 9px;
+  border-radius: 999px;
+  /* currentColor throughout: these steps flip between a black and a white
+     field, and the control has to stay legible on both without owning a
+     colour that could contaminate the measurement. */
+  border: 1px solid currentColor;
+  background: none;
+  color: inherit;
+  opacity: 0.45;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: opacity 0.14s ease;
+}
+
+.overlay-exit:hover {
+  opacity: 1;
+}
+
+/* Stopping a measurement is rare and destructive: reachable, not prominent. */
+.assess__quit {
+  margin-top: 4px;
+  align-self: center;
+  background: none;
+  border: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.14s ease;
+}
+
+.assess__quit:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+/* A row button that leaves the page for a full-screen step says so, rather
+   than looking like the toggles and sliders it sits beside. */
+.pill-btn--go::after {
+  content: '›';
+  margin-left: 7px;
+  font-weight: 700;
+  opacity: 0.65;
+}
+
+/* =======================================================================
+   Layout
+   A different arrangement, not a different palette. Every colour below is
+   an existing token, `currentColor`, or the rgba(255,255,255,x) /
+   rgba(120,140,220,x) values already in use above. No new hue appears here.
+   ======================================================================= */
+
+/* Two columns instead of three: the mode list now lives inside the therapy
+   it belongs to, so the grid gets the width back. */
+.body {
+  grid-template-columns: 262px 1fr;
+}
+
+.sidebar {
+  padding: 22px 16px 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sidebar__title {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.45;
+  padding: 6px 12px 12px;
+}
+
+.sidebar__group {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar__group + .sidebar__group {
+  margin-top: 6px;
+}
+
+.sidebar__therapy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.sidebar__therapy:hover {
+  opacity: 0.85;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar__therapy--active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* The count tells you how much is behind a therapy before you open it. */
+.sidebar__count {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.5;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 140, 220, 0.3);
+}
+
+/* Modes hang off their therapy on a spine, so the nesting is structural
+   rather than something you have to infer from indentation alone. */
+.sidebar__modes {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 3px 0 2px 20px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(120, 140, 220, 0.22);
+}
+
+.sidebar__mode {
+  position: relative;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.sidebar__mode:hover {
+  opacity: 0.85;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar__mode--active {
+  opacity: 1;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* The active mode marks the spine it hangs from. */
+.sidebar__mode--active::before {
+  content: '';
+  position: absolute;
+  left: -13px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+/* --- session settings, stacked in the sidebar --------------------------- */
+
+.sidebar__title--rule {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(120, 140, 220, 0.18);
+}
+
+/* The same controls, turned on their side. Labels sit above their input
+   instead of beside it, which is what lets them fit a 260px column. */
+.sidebar .controls {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  margin: 0;
+  padding: 0 12px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.sidebar .control {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+}
+
+.sidebar .control label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.sidebar .control select,
+.sidebar .control input[type='range'] {
+  width: 100%;
+}
+
+/* Four equal cells rather than a wrapping row, so the colour controls read
+   as one block and stop pushing the sidebar past its own height. */
+.sidebar .swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 0;
+  width: 100%;
+}
+
+.sidebar .swatch {
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 4px;
+  font-size: 10px;
+  line-height: 1.15;
+  text-align: center;
+  min-width: 0;
+}
+
+.sidebar .swatch__dot {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar .bg-toggle {
+  font-size: 10px;
+  padding: 5px 4px;
+  white-space: normal;
+}
+
+.crumb {
+  padding: 18px 24px 12px 20px;
+}
+
+/* --- activities: vertical tiles ---------------------------------------- */
+.group__cards {
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  gap: 14px;
+}
+
+/* Icon over name over skill. The horizontal card put a 62px tile beside two
+   words and wasted the rest of the row; stacking fits far more on screen and
+   leaves room to say what each activity actually trains. */
+.card {
+  height: auto;
+  min-height: 172px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 16px 15px 14px;
+  gap: 0;
+  border-radius: 14px;
+}
+
+.card__icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  margin-bottom: 14px;
+  flex: 0 0 auto;
+}
+
+.card__icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.card__title {
+  flex: 0 0 auto;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: 0.2px;
+  margin-bottom: 7px;
+}
+
+/* Was a title attribute, so it never reached a touch screen. */
+.card__skill {
+  font-size: 11.5px;
+  line-height: 1.36;
+  font-weight: 500;
+  opacity: 0.78;
+  margin-top: auto;
+}
+
+.card__go {
+  display: none;
+}
+
+.grid-scroll {
+  padding: 4px 24px 40px 20px;
+}
+
+@media (max-width: 980px) {
+  .body {
+    grid-template-columns: 190px 1fr;
+  }
+  .group__cards {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}

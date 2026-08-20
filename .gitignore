@@ -1,0 +1,13 @@
+# Dependencies and toolchains
+node_modules/
+.tools/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Local data: patient records, session history, logs. Never committed.
+data/
+
+# Source maps: useful locally, noise in the repository.
+*.map
