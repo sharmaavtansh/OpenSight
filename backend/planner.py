@@ -184,7 +184,11 @@ def _stimuli_for(activity_id: str, params: dict[str, Any], rng: random.Random) -
         trials = []
         for _ in range(40):
             symbol = rng.choice(symbols)
-            steps = sorted({round(contrast * m, 3) for m in (0.6, 1.0, 1.5, 2.2)})
+            # Clamped: Michelson contrast is defined on 0-1, and a step above
+            # 1.0 rendered as an out-of-range CSS channel that the browser
+            # silently pinned to full - compressing the top of the ladder
+            # instead of extending it.
+            steps = sorted({min(1.0, round(contrast * m, 3)) for m in (0.6, 1.0, 1.5, 2.2)})
             trials.append({"symbol": symbol, "target_contrast": rng.choice(steps), "steps": steps})
         return {"symbols": symbols, "trials": trials}
 

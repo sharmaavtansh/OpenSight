@@ -282,7 +282,7 @@ Eighteen of the twenty activities have their own bespoke mechanic:
 | Alphabet Racer | lane runner; steer into the lane holding the target letter |
 | Ball Drop | release from a hopper onto the box marked with the target letter; ends when the tube empties |
 | Ice Jump | time a jump so the cube lands in the matching-letter glass |
-| Trace Magic | trace a shape, staying inside the path corridor |
+| Trace Magic | pick a shape from the canvas toolbar, trace it with the pen, rub out your own marks with the eraser |
 | Balloon Float | balloons carry a wrongly oriented E that rights itself after 5-6s; pop only while correct |
 | Balloon Jump | as above, with balloons appearing away from centre |
 | Basket Catch | basket follows the mouse; catch whatever falls |
@@ -294,9 +294,32 @@ Eighteen of the twenty activities have their own bespoke mechanic:
 | Matching Lines | find every line matching the reference slant |
 | Pattern Matching | find every three-row bar pattern matching the reference |
 
-The two **Faint Shape** activities (monocular only) run a
-contrast-matching mechanic built from the skill they train. They are the two
-that have had the least testing with a patient.
+The two **Faint Shape** activities (monocular only) run a contrast-matching
+mechanic built from the skill they train rather than copied from anywhere. They
+are covered by `npm run check:contrast`, which drives them headlessly and
+asserts the things that matter clinically: every contrast step lies within 0-1,
+no two steps render as the same colour, the target is always one of the offered
+steps, a correct click scores and a wrong one does not, and an untouched trial
+times out rather than stalling. They still have the least *patient* testing of
+the twenty.
+
+## Checking the activities
+
+Two of the twenty are covered by headless harnesses that drive the game modules
+directly against a stub canvas, so scoring and geometry can be asserted without
+a browser or a pair of eyes:
+
+```bash
+cd web && npm run check:tracing
+```
+
+```bash
+cd web && npm run check:contrast
+```
+
+`check:contrast` needs the API running, because the point is to exercise the
+stimuli the server actually sends rather than a fixture that could drift from
+them.
 
 ## Scoring
 

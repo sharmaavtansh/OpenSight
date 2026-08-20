@@ -306,7 +306,12 @@ export function atContrast(colour: string, background: string, contrast: number)
   }
   const fg = parse(colour)
   const bg = parse(background)
-  const mixed = [0, 1, 2].map((i) => Math.round(bg[i] + (fg[i] - bg[i]) * contrast))
+  // Clamped: a contrast above 1 produced a channel over 255, which the
+  // browser pins silently - two different contrasts could then render as
+  // the same colour, and one of them would score as wrong.
+  const mixed = [0, 1, 2].map((i) =>
+    Math.max(0, Math.min(255, Math.round(bg[i] + (fg[i] - bg[i]) * contrast))),
+  )
   return `rgba(${mixed[0]}, ${mixed[1]}, ${mixed[2]}, ${fg[3]})`
 }
 

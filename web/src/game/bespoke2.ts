@@ -300,11 +300,21 @@ export const iceJump: GameFactory = () => {
 
 // -------------------------------------------------- Tracing (trace_magic)
 
-/** Trace a line-art shape. The outline is sampled into evenly spaced
- *  checkpoints; dragging within tolerance of the next one advances the trace,
- *  and straying well clear of the whole path scores as an error. */
+/** Trace a line-art shape.
+ *
+ *  The outline is sampled into evenly spaced checkpoints; dragging within
+ *  tolerance of the next one advances the trace, and straying well clear of the
+ *  whole path scores as an error.
+ *
+ *  The toolbar is drawn on the canvas rather than in the DOM. That is not
+ *  decoration: every mark on this screen has to obey the anaglyph palette, and
+ *  an HTML control would render in its own colours and leak to the fellow eye,
+ *  which is exactly what the therapy is trying to prevent. Drawing it here
+ *  means the tools are subject to the same channel rules as the artwork.
+ */
 export const tracing: GameFactory = () => {
   type Pt = { x: number; y: number }
+  type Tool = 'pen' | 'eraser'
 
   const SHAPES: Record<string, Pt[]> = {
     star: Array.from({ length: 11 }, (_, i) => {
@@ -339,14 +349,41 @@ export const tracing: GameFactory = () => {
           (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 40,
       }
     }),
+    boat: [
+      { x: 0.5, y: 0.12 },
+      { x: 0.5, y: 0.58 },
+      { x: 0.16, y: 0.58 },
+      { x: 0.26, y: 0.84 },
+      { x: 0.74, y: 0.84 },
+      { x: 0.84, y: 0.58 },
+      { x: 0.5, y: 0.58 },
+      { x: 0.82, y: 0.3 },
+      { x: 0.5, y: 0.3 },
+    ],
+    fish: Array.from({ length: 33 }, (_, i) => {
+      const t = (i / 32) * Math.PI * 2
+      return { x: 0.5 + Math.cos(t) * 0.36, y: 0.5 + Math.sin(t) * 0.2 }
+    }).concat([
+      { x: 0.86, y: 0.5 },
+      { x: 0.98, y: 0.32 },
+      { x: 0.98, y: 0.68 },
+      { x: 0.86, y: 0.5 },
+    ]),
   }
   const NAMES = Object.keys(SHAPES)
 
   let path: Pt[] = []
   let reached = 0
+  /** The stroke in progress. */
   let ink: Pt[] = []
+  /** Everything already drawn, kept until the child clears it. */
+  let strokes: Pt[][] = []
   let started = 0
   let shapeIndex = 0
+  let tool: Tool = 'pen'
+  /** Hit boxes for the toolbar, rebuilt each frame from the same geometry the
+   *  drawing uses, so what is tappable can never drift from what is visible. */
+  let buttons: Array<{ id: string; x: number; y: number; r: number }> = []
 
   /** Resample so checkpoints are evenly spaced whatever the shape. */
   const densify = (pts: Pt[], step: number): Pt[] => {
@@ -364,11 +401,29 @@ export const tracing: GameFactory = () => {
     return out
   }
 
-  const build = (ctx: Ctx) => {
-    const name = NAMES[shapeIndex % NAMES.length]
-    shapeIndex += 1
-    const size = Math.min(ctx.w, ctx.h) * 0.62
-    const ox = ctx.w / 2 - size / 2
+  const layout = (ctx: Ctx) => {
+    const r = Math.max(16, Math.min(ctx.w, ctx.h) * 0.032)
+    const gap = r * 2.5
+    const x = r * 2
+    let y = r * 2
+    buttons = []
+    for (const name of NAMES) {
+      buttons.push({ id: 'shape:' + name, x, y, r })
+      y += gap
+    }
+    y += gap * 0.4
+    buttons.push({ id: 'tool:pen', x, y, r })
+    y += gap
+    buttons.push({ id: 'tool:eraser', x, y, r })
+    y += gap
+    buttons.push({ id: 'clear', x, y, r })
+  }
+
+  const buildShape = (ctx: Ctx, name: string) => {
+    // The drawing area starts clear of the toolbar column.
+    const left = Math.max(16, Math.min(ctx.w, ctx.h) * 0.032) * 4
+    const size = Math.min(ctx.w - left, ctx.h) * 0.62
+    const ox = left + (ctx.w - left) / 2 - size / 2
     const oy = ctx.h / 2 - size / 2
     path = densify(
       SHAPES[name].map((p) => ({ x: ox + p.x * size, y: oy + p.y * size })),
@@ -376,22 +431,47 @@ export const tracing: GameFactory = () => {
     )
     reached = 0
     ink = []
+    strokes = []
     started = ctx.t
     ctx.setPending(path.length)
   }
 
+  const build = (ctx: Ctx) => {
+    const name = NAMES[shapeIndex % NAMES.length]
+    shapeIndex += 1
+    buildShape(ctx, name)
+  }
+
+  /** A small version of a shape, for its toolbar button. */
+  const thumb = (g: CanvasRenderingContext2D, name: string, x: number, y: number, r: number) => {
+    const pts = SHAPES[name]
+    g.beginPath()
+    pts.forEach((p, i) => {
+      const px = x + (p.x - 0.5) * r * 1.5
+      const py = y + (p.y - 0.5) * r * 1.5
+      if (i === 0) g.moveTo(px, py)
+      else g.lineTo(px, py)
+    })
+    g.stroke()
+  }
+
   return {
     brief:
-      'Use your finger or the mouse to trace the shape on the screen. Try to stay on the path to complete the tracing.',
+      'Pick a shape on the left, then trace it with the pen. The eraser rubs out your own marks; the outline stays.',
 
     init: build,
 
     update: (ctx) => {
       ctx.setPending(path.length - reached)
-      if (reached >= path.length) build(ctx)
+      // Finishing no longer jumps to the next shape unasked - the child chose
+      // this one, and yanking it away the instant it is done is a poor reward.
+      if (reached >= path.length && ctx.t - started > 1200) build(ctx)
     },
 
     draw: (g, ctx) => {
+      layout(ctx)
+      const currentShape = NAMES[(shapeIndex - 1 + NAMES.length) % NAMES.length]
+
       // Guide outline, in the shared field so the shape stays binocular.
       g.strokeStyle = ctx.fusion
       g.lineWidth = Math.max(8, ctx.size * 0.9)
@@ -410,11 +490,13 @@ export const tracing: GameFactory = () => {
         g.stroke()
       }
 
-      if (ink.length > 1) {
-        g.strokeStyle = ctx.target
-        g.lineWidth = Math.max(3, ctx.size * 0.28)
+      // The child's own marks, kept until cleared.
+      g.strokeStyle = ctx.target
+      g.lineWidth = Math.max(3, ctx.size * 0.28)
+      for (const stroke of strokes.concat(ink.length ? [ink] : [])) {
+        if (stroke.length < 2) continue
         g.beginPath()
-        ink.forEach((p, i) => (i === 0 ? g.moveTo(p.x, p.y) : g.lineTo(p.x, p.y)))
+        stroke.forEach((p, i) => (i === 0 ? g.moveTo(p.x, p.y) : g.lineTo(p.x, p.y)))
         g.stroke()
       }
 
@@ -427,14 +509,86 @@ export const tracing: GameFactory = () => {
         g.arc(next.x, next.y, ctx.size * 0.55, 0, Math.PI * 2)
         g.stroke()
       }
+
+      // --- toolbar ---------------------------------------------------------
+      for (const b of buttons) {
+        const isShape = b.id.startsWith('shape:')
+        const name = b.id.slice(6)
+        const active = isShape ? name === currentShape : b.id === 'tool:' + tool
+        g.lineWidth = active ? 3 : 1.5
+        g.strokeStyle = active ? ctx.target : ctx.fusion
+        g.beginPath()
+        g.roundRect(b.x - b.r, b.y - b.r, b.r * 2, b.r * 2, b.r * 0.35)
+        g.stroke()
+
+        g.lineWidth = 2
+        g.strokeStyle = active ? ctx.target : ctx.fusion
+        if (isShape) {
+          thumb(g, name, b.x, b.y, b.r)
+        } else if (b.id === 'tool:pen') {
+          g.beginPath()
+          g.moveTo(b.x - b.r * 0.4, b.y + b.r * 0.4)
+          g.lineTo(b.x + b.r * 0.35, b.y - b.r * 0.45)
+          g.moveTo(b.x - b.r * 0.4, b.y + b.r * 0.4)
+          g.lineTo(b.x - b.r * 0.15, b.y + b.r * 0.35)
+          g.stroke()
+        } else if (b.id === 'tool:eraser') {
+          g.beginPath()
+          g.roundRect(b.x - b.r * 0.45, b.y - b.r * 0.25, b.r * 0.9, b.r * 0.5, b.r * 0.12)
+          g.moveTo(b.x - b.r * 0.5, b.y + b.r * 0.45)
+          g.lineTo(b.x + b.r * 0.5, b.y + b.r * 0.45)
+          g.stroke()
+        } else {
+          // clear
+          g.beginPath()
+          g.moveTo(b.x - b.r * 0.35, b.y - b.r * 0.35)
+          g.lineTo(b.x + b.r * 0.35, b.y + b.r * 0.35)
+          g.moveTo(b.x + b.r * 0.35, b.y - b.r * 0.35)
+          g.lineTo(b.x - b.r * 0.35, b.y + b.r * 0.35)
+          g.stroke()
+        }
+      }
     },
 
     pointer: (p, ctx) => {
+      if (p.type === 'down') {
+        // A tap on the toolbar is a command, never a mark.
+        for (const b of buttons) {
+          if (Math.abs(p.x - b.x) <= b.r && Math.abs(p.y - b.y) <= b.r) {
+            if (b.id.startsWith('shape:')) {
+              const name = b.id.slice(6)
+              shapeIndex = NAMES.indexOf(name) + 1
+              buildShape(ctx, name)
+            } else if (b.id === 'tool:pen') tool = 'pen'
+            else if (b.id === 'tool:eraser') tool = 'eraser'
+            else if (b.id === 'clear') {
+              strokes = []
+              ink = []
+            }
+            sound.play('select')
+            return
+          }
+        }
+      }
+
       if (p.type === 'up') {
+        if (ink.length > 1) strokes.push(ink)
         ink = []
         return
       }
-      if (!p.down || reached >= path.length) return
+      if (!p.down) return
+
+      if (tool === 'eraser') {
+        // Rub out the child's own marks only. The guide outline and the
+        // completed trace are the exercise, not something to be undone.
+        const reach = Math.max(12, ctx.size * 0.9)
+        strokes = strokes
+          .map((stroke) => stroke.filter((q) => dist(q.x, q.y, p.x, p.y) > reach))
+          .filter((stroke) => stroke.length > 1)
+        return
+      }
+
+      if (reached >= path.length) return
       ink.push({ x: p.x, y: p.y })
       if (ink.length > 240) ink.shift()
 
