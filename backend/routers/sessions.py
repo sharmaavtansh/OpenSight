@@ -33,7 +33,8 @@ def start_session(payload: SessionStart, conn: sqlite3.Connection = Depends(get_
     if payload.acuity not in ACUITY_LEVELS:
         raise HTTPException(status_code=422, detail=f"unsupported acuity 20/{payload.acuity}")
 
-    settings = load_settings(conn)
+    # This user's calibration and channel alphas, not the install default.
+    settings = load_settings(conn, payload.patient_id)
     calibration = dict(settings["calibration"])
     if payload.device_pixel_ratio:
         # The browser knows its own DPR better than the stored calibration does.

@@ -79,8 +79,13 @@ def _current_step(
     return None
 
 
-def _optotype_px(denominator: int, conn: sqlite3.Connection, dpr: float | None) -> dict[str, Any]:
-    settings = load_settings(conn)
+def _optotype_px(
+    denominator: int,
+    conn: sqlite3.Connection,
+    dpr: float | None,
+    patient_id: int | None = None,
+) -> dict[str, Any]:
+    settings = load_settings(conn, patient_id)
     calibration = dict(settings["calibration"])
     if dpr:
         calibration["device_pixel_ratio"] = dpr
@@ -94,7 +99,7 @@ def _progress(runs: dict[tuple[str, str], ConditionRun]) -> dict[str, Any]:
 
 def _next_payload(
     assessment_id: str, seed: int, rows: list[sqlite3.Row], conn: sqlite3.Connection,
-    dpr: float | None,
+    dpr: float | None, patient_id: int | None = None,
 ) -> dict[str, Any]:
     runs = _runs_from_trials(rows)
     step = _current_step(runs)
@@ -105,7 +110,7 @@ def _next_payload(
     # Seeded per trial index so a reload re-presents the same orientation
     # rather than handing the patient a fresh guess.
     rng = random.Random(f"{seed}:{len(rows)}")
-    acuity = _optotype_px(denominator, conn, dpr)
+    acuity = _optotype_px(denominator, conn, dpr, patient_id)
     return {
         "assessment_id": assessment_id,
         "complete": False,
@@ -139,13 +144,17 @@ def _trials(assessment_id: str, conn: sqlite3.Connection) -> list[sqlite3.Row]:
 def start_assessment(payload: AssessmentStart, conn: sqlite3.Connection = Depends(get_db)) -> dict:
     assessment_id = uuid.uuid4().hex
     seed = payload.seed if payload.seed is not None else secrets.randbelow(2**31)
-    settings = load_settings(conn)
+    # Snapshot this user's calibration: a later recalibration must not
+    # retroactively change what a recorded measurement meant.
+    settings = load_settings(conn, payload.patient_id)
     conn.execute(
         "INSERT INTO assessments (id, patient_id, kind, seed, acuity_json) VALUES (?,?,?,?,?)",
         (assessment_id, payload.patient_id, payload.kind, seed, json.dumps(settings["calibration"])),
     )
     conn.commit()
-    return _next_payload(assessment_id, seed, [], conn, payload.device_pixel_ratio)
+    return _next_payload(
+        assessment_id, seed, [], conn, payload.device_pixel_ratio, payload.patient_id
+    )
 
 
 @router.post("/{assessment_id}/respond")
@@ -180,7 +189,9 @@ def respond(
     conn.commit()
 
     rows = _trials(assessment_id, conn)
-    result = _next_payload(assessment_id, row["seed"], rows, conn, payload.device_pixel_ratio)
+    result = _next_payload(
+        assessment_id, row["seed"], rows, conn, payload.device_pixel_ratio, row["patient_id"]
+    )
     result["last"] = {"target": target, "response": payload.direction, "correct": bool(correct)}
 
     if result["complete"]:
@@ -233,13 +244,13 @@ def get_assessment(assessment_id: str, conn: sqlite3.Connection = Depends(get_db
     return record
 
 
-def _glasses_usable(conn: sqlite3.Connection) -> bool:
+def _glasses_usable(conn: sqlite3.Connection, patient_id: int | None = None) -> bool:
     """Can the stored calibration actually separate the channels?
 
     A channel whose alpha is 1.0 has never been nulled, so MFBF cannot be
     trusted to isolate and monocular therapy is the honest recommendation.
     """
-    anaglyph = load_settings(conn)["anaglyph"]
+    anaglyph = load_settings(conn, patient_id)["anaglyph"]
     for background, names in PROFILES.items():
         channels = (anaglyph.get(background) or {}).get("channels") or {}
         for name in names:
@@ -266,7 +277,7 @@ def latest_plan(patient_id: int | None = None, conn: sqlite3.Connection = Depend
     # Recomputing means a rules change applies to past assessments too, instead
     # of leaving stale targets on record.
     report = build_report(stored["left"], stored["right"])
-    plan = build_plan(report, glasses_usable=_glasses_usable(conn))
+    plan = build_plan(report, glasses_usable=_glasses_usable(conn, patient_id))
     return {"assessment_id": row["id"], "measured_at": row["ended_at"], "report": report, "plan": plan}
 
 

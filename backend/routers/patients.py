@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import get_db
 from ..models import PatientIn
+from .settings import settings_key
 
 router = APIRouter(prefix="/api/patients", tags=["patients"])
 
@@ -47,4 +48,7 @@ def update_patient(
 @router.delete("/{patient_id}", status_code=204)
 def delete_patient(patient_id: int, conn: sqlite3.Connection = Depends(get_db)) -> None:
     conn.execute("DELETE FROM patients WHERE id = ?", (patient_id,))
+    # Their calibration goes with them. Leaving it behind would hand the row to
+    # whoever next got the same autoincrement id.
+    conn.execute("DELETE FROM settings WHERE key = ?", (settings_key(patient_id),))
     conn.commit()

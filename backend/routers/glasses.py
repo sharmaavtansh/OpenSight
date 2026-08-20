@@ -26,7 +26,7 @@ from ..glasses import (
     steps,
 )
 from ..models import SettingsIn
-from .settings import SETTINGS_KEY, load_settings
+from .settings import load_settings, settings_key
 
 router = APIRouter(prefix="/api/glasses", tags=["glasses"])
 
@@ -83,7 +83,11 @@ def safe(faintest_seen: float | None = None) -> dict[str, Any]:
 
 
 @router.post("")
-def submit(payload: GlassesCalibration, conn: sqlite3.Connection = Depends(get_db)) -> dict[str, Any]:
+def submit(
+    payload: GlassesCalibration,
+    patient_id: int | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, Any]:
     orientation = resolve_orientation(payload.right_eye_sees, payload.left_eye_sees)
 
     isolation: dict[str, dict[str, float | None]] = {bg: {} for bg in PROFILES}
@@ -101,10 +105,12 @@ def submit(payload: GlassesCalibration, conn: sqlite3.Connection = Depends(get_d
 
     saved = False
     if payload.save and result["usable"]:
-        merged = apply_to_settings(load_settings(conn), result)
+        merged = apply_to_settings(load_settings(conn, patient_id), result)
         # Validate before persisting, so a bad merge cannot corrupt settings.
         validated = SettingsIn(**merged).model_dump()
-        write_setting(conn, SETTINGS_KEY, validated)
+        # Which lens sits over which eye, and how much each channel leaks,
+        # are facts about one person and one pair of glasses.
+        write_setting(conn, settings_key(patient_id), validated)
         conn.commit()
         saved = True
 
@@ -115,11 +121,15 @@ def submit(payload: GlassesCalibration, conn: sqlite3.Connection = Depends(get_d
 
 
 @router.get("/preview")
-def preview(background: str = "black", conn: sqlite3.Connection = Depends(get_db)) -> dict[str, Any]:
+def preview(
+    background: str = "black",
+    patient_id: int | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> dict[str, Any]:
     """What the current stored calibration means, in plain terms."""
     if background not in PROFILES:
         raise HTTPException(status_code=404, detail="unknown background profile")
-    settings = load_settings(conn)
+    settings = load_settings(conn, patient_id)
     anaglyph = settings["anaglyph"]
     profile = anaglyph.get(background) or {}
     channels = profile.get("channels") or {}

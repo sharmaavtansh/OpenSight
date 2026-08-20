@@ -16,9 +16,11 @@ router = APIRouter(prefix="/api", tags=["catalog"])
 
 
 @router.get("/catalog")
-def get_catalog(conn: sqlite3.Connection = Depends(get_db)) -> dict:
+def get_catalog(
+    patient_id: int | None = None, conn: sqlite3.Connection = Depends(get_db)
+) -> dict:
     """Everything the shell needs to render itself."""
-    settings = load_settings(conn)
+    settings = load_settings(conn, patient_id)
     cal = DisplayCalibration(**settings["calibration"])
     return {
         **cat.tree(),
@@ -33,10 +35,11 @@ def get_catalog(conn: sqlite3.Connection = Depends(get_db)) -> dict:
 def get_acuity_table(
     viewing_distance_cm: float | None = None,
     device_pixel_ratio: float | None = None,
+    patient_id: int | None = None,
     conn: sqlite3.Connection = Depends(get_db),
 ) -> dict:
     """Recompute optotype sizes for an ad-hoc viewing distance."""
-    settings = load_settings(conn)
+    settings = load_settings(conn, patient_id)
     calibration = dict(settings["calibration"])
     if viewing_distance_cm is not None:
         calibration["viewing_distance_cm"] = viewing_distance_cm

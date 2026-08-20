@@ -1274,3 +1274,188 @@ select {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 }
+
+/* =======================================================================
+   User menu
+   Structure only. Colours are existing tokens or the rgba(120,140,220,x) /
+   rgba(255,255,255,x) values already used above; no new hue.
+   ======================================================================= */
+
+.usermenu { position: relative; margin-right: 6px; }
+
+.usermenu__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 10px 0 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(120, 140, 220, 0.22);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.usermenu__button:hover,
+.usermenu__button--open { background: rgba(120, 140, 220, 0.14); }
+
+.usermenu__name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usermenu__avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(120, 140, 220, 0.28);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.usermenu__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: 268px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(120, 140, 220, 0.28);
+  background: var(--navy-800);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+
+.usermenu__heading {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  padding: 4px 8px 10px;
+}
+
+.usermenu__row { display: flex; align-items: center; gap: 4px; }
+
+.usermenu__item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.62;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.usermenu__item:hover { opacity: 1; background: rgba(255, 255, 255, 0.06); }
+.usermenu__item--active { opacity: 1; background: rgba(255, 255, 255, 0.09); }
+
+.usermenu__label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* What distinguishes one user from another is their calibration, so the row
+   says so rather than leaving two identical-looking names. */
+.usermenu__label em {
+  font-style: normal;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+
+.usermenu__remove {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.3;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.usermenu__remove:hover { opacity: 1; background: rgba(255, 255, 255, 0.08); }
+
+.usermenu__new {
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px;
+  border: 1px dashed rgba(120, 140, 220, 0.34);
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.usermenu__new:hover { opacity: 1; background: rgba(255, 255, 255, 0.05); }
+
+.usermenu__add { display: flex; gap: 6px; margin-top: 6px; }
+
+.usermenu__add input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(120, 140, 220, 0.34);
+  background: var(--navy-900);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+
+.usermenu__add button {
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--purple);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.usermenu__add button:disabled { opacity: 0.4; cursor: default; }
+
+.usermenu__note {
+  margin: 12px 4px 2px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  opacity: 0.5;
+}
+
+@media (max-width: 1080px) {
+  .usermenu__name { display: none; }
+}

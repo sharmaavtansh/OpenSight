@@ -97,12 +97,25 @@ them. Five failures from one address triggers a five-minute backoff.
 It is a lock on the front door, not a user system: everyone who gets in shares
 one identity and sees everything.
 
-One consequence worth stating plainly, because it is not a privacy problem but
-a correctness one: **display calibration is global**. Screen size, pixel pitch
-and anaglyph colours are stored once for the whole instance. If two people use
-one deployment from different screens, the second recalibration silently
-changes the first person's optotype sizes, and their acuity numbers stop
-meaning what they say. One instance per display.
+### Users
+
+Calibration is a property of a person at a screen, not of the install: the
+ruler measurement encodes that display's pixel pitch, and the channel alphas
+encode how strongly *those* glasses leak for *that* pair of eyes. Stored once,
+a second person recalibrating silently changed the first person's optotype
+sizes and their recorded acuity stopped meaning what it said.
+
+Each user therefore has their own settings row, layered over the shared install
+defaults, covering display calibration, anaglyph colours, which lens is over
+which eye, and controller preferences. Pick a user from the menu in the header;
+the choice is remembered per browser, so two devices can sit on different users
+at once. With no user selected the shared install row is used, which is what a
+single-person desktop install does.
+
+Sessions and assessments already carried a `patient_id`; they now resolve their
+palette and optotype sizes through it, so a run renders in the palette of
+whoever it was started for. Removing a user deletes their settings row - the
+sessions they completed are kept.
 
 ---
 

@@ -6,6 +6,7 @@ import type {
   SessionResult,
   Settings,
   Trial,
+  User,
 } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -21,16 +22,38 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+/** Every call that reads or writes a visual configuration is scoped to a user.
+ *
+ *  Calibration describes a person at a screen - their pixel pitch, their
+ *  glasses, how much each channel leaks for their eyes - so a single stored
+ *  copy meant one person recalibrating silently changed everyone else's
+ *  optotype sizes. `null` means no user selected, which reads and writes the
+ *  shared install row, and is what a single-person desktop install does. */
+const scoped = (path: string, patientId: number | null) =>
+  patientId === null ? path : `${path}${path.includes('?') ? '&' : '?'}patient_id=${patientId}`
+
 export const api = {
-  catalog: () => request<Catalog>('/api/catalog'),
+  catalog: (patientId: number | null = null) =>
+    request<Catalog>(scoped('/api/catalog', patientId)),
 
-  settings: () => request<Settings>('/api/settings'),
+  settings: (patientId: number | null = null) =>
+    request<Settings>(scoped('/api/settings', patientId)),
 
-  saveSettings: (settings: Omit<Settings, 'derived'>) =>
-    request<Settings>('/api/settings', {
+  saveSettings: (settings: Omit<Settings, 'derived'>, patientId: number | null = null) =>
+    request<Settings>(scoped('/api/settings', patientId), {
       method: 'PUT',
       body: JSON.stringify(settings),
     }),
+
+  users: () => request<{ patients: User[] }>('/api/patients'),
+
+  createUser: (payload: { name: string; treated_eye?: string | null }) =>
+    request<User>('/api/patients', { method: 'POST', body: JSON.stringify(payload) }),
+
+  updateUser: (id: number, payload: { name: string; treated_eye?: string | null }) =>
+    request<User>(`/api/patients/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+
+  deleteUser: (id: number) => request<void>(`/api/patients/${id}`, { method: 'DELETE' }),
 
   startSession: (payload: {
     activity_id: string
@@ -40,6 +63,7 @@ export const api = {
     duration_min: number
     device_pixel_ratio?: number
     seed?: number
+    patient_id?: number | null
   }) =>
     request<SessionPlan>('/api/sessions', {
       method: 'POST',

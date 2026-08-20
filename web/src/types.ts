@@ -203,3 +203,15 @@ export interface Progress {
   by_activity: Array<Record<string, any>>
   by_day: Array<Record<string, any>>
 }
+
+/** A person using the app. Each carries their own visual configuration:
+ *  display calibration, anaglyph channel colours and which lens is over which
+ *  eye. The backend calls these patients; the UI calls them users. */
+export interface User {
+  id: number
+  name: string
+  dob?: string | null
+  treated_eye?: 'left' | 'right' | 'both' | null
+  notes?: string | null
+  created_at?: string
+}

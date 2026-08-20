@@ -1,6 +1,7 @@
 import { Icon } from './Icons'
 import { useApp } from '../store'
 import { sound } from '../audio'
+import { UserMenu } from './UserMenu'
 
 /** Header destinations. Each carries a word as well as a glyph: four unlabelled
  *  icons in a row is a memory test, and this app is used by children and by
@@ -44,6 +45,8 @@ export function Header() {
       </button>
 
       <nav className="header__actions" aria-label="Main">
+        <UserMenu />
+
         {DESTINATIONS.map((d) => {
           const active = screen === d.screen
           return (
