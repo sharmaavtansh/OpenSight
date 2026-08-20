@@ -1,6 +1,8 @@
 # OpenSight on Fly.io
 app = "opensight"
-primary_region = "bom"
+# Mumbai (bom) had no volume capacity available; Singapore is the
+# nearest region that did.
+primary_region = "sin"
 
 [build]
 
