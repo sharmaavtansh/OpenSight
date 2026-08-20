@@ -303,25 +303,43 @@ steps, a correct click scores and a wrong one does not, and an untouched trial
 times out rather than stalling. They still have the least *patient* testing of
 the twenty.
 
-## Checking the activities
-
-Two of the twenty are covered by headless harnesses that drive the game modules
-directly against a stub canvas, so scoring and geometry can be asserted without
-a browser or a pair of eyes:
+## Testing
 
 ```bash
-cd web && npm run check:tracing
+py -3.11 test.py
 ```
 
-```bash
-cd web && npm run check:contrast
-```
+Runs everything: the clinical maths, every endpoint, and all twenty activities.
+It starts its own server on a throwaway database, so nothing needs to be
+running first and the real data is never touched. 305 checks.
 
-`check:contrast` needs the API running, because the point is to exercise the
-stimuli the server actually sends rather than a fixture that could drift from
-them.
+| Suite | What it covers |
+|---|---|
+| `tests/test_logic.py` | Optotype geometry, display calibration, difficulty scaling, palette resolution, the acuity staircase, the prescription rules, glasses isolation verdicts |
+| `tests/test_api.py` | Every endpoint, on an open install and a gated one: the catalogue, a session start-to-finish, a full assessment, settings round-trips, sign-up, sign-in, recovery, and cross-account isolation |
+| `web/harness/games.ts` | All twenty activities driven headlessly for hundreds of frames |
+| `web/harness/tracing.ts` | The tracing toolbar: picker, pen, eraser, clear |
+| `web/harness/contrast.ts` | The two Faint Shape activities |
 
-## Scoring
+Three things are worth singling out, because they are the ones where a silent
+fault would be a clinical one rather than a cosmetic one.
+
+**Colour obedience.** Every activity is rendered twice with two entirely
+different palettes and the emitted colours are compared. A colour that survives
+the swap is hardcoded, which means it reaches *both* eyes - and an activity
+whose target is visible to the fellow eye is not doing MFBF, it is just a game.
+All twenty pass. Gradients carry their colour stops into the comparison, so a
+hardcoded colour cannot hide inside one.
+
+**The detector is itself tested.** A deliberately hardcoded colour is planted
+and must be caught. Without that, a clean report proves nothing - a test that
+cannot fail is worse than no test, because it looks like evidence.
+
+**Session scoping.** A signed-in account asks for another account's
+`patient_id` and must get its own data back; a write aimed at another account
+must land on its own row. Both are asserted rather than assumed.
+
+## Scoring## Scoring
 
 Per trial: `hit`, `miss`, `timeout`, `false_alarm`. Sessions aggregate to score
 (10/hit, −3/false alarm), accuracy, mean reaction time and targets-per-minute;
